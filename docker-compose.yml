@@ -1,0 +1,41 @@
+version: '3.8'
+services:
+  app:
+    build: .
+    container_name: speakcraft-backend
+    ports:
+      - "4000:4000"
+    environment:
+      - NODE_ENV=development
+      - PORT=4000
+      - MONGODB_URI=mongodb://mongo:27017/speakcraft
+      - JWT_SECRET=your_jwt_secret
+      - JWT_REFRESH_SECRET=your_jwt_refresh_secret
+      - CLOUDINARY_CLOUD_NAME=your_cloud_name
+      - CLOUDINARY_API_KEY=your_api_key
+      - CLOUDINARY_API_SECRET=your_api_secret
+    depends_on:
+      - mongo
+    volumes:
+      - .:/usr/src/app
+    command: npm run dev
+
+  mongo:
+    image: mongo:6
+    container_name: speakcraft-mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: speakcraft-redis
+  #   ports:
+  #     - "6379:6379"
+  #   volumes:
+  #     - redis_data:/data
+
+volumes:
+  mongo_data:
+  # redis_data: 
