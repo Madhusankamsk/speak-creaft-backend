@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Navigation Debug</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f8fafc;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .header {
+            background: white;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .nav {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+        }
+
+        .nav-item {
+            padding: 0.75rem 1.5rem;
+            background: white;
+            border: 2px solid #e2e8f0;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            color: #374151;
+        }
+
+        .nav-item:hover {
+            border-color: #667eea;
+            background: #f8fafc;
+        }
+
+        .nav-item.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+
+        .content-section {
+            display: none;
+            background: white;
+            padding: 2rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .content-section.active {
+            display: block;
+        }
+
+        .debug-info {
+            background: #f3f4f6;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin-bottom: 1rem;
+            font-family: monospace;
+            font-size: 0.875rem;
+        }
+
+        .btn {
+            padding: 0.5rem 1rem;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 0.25rem;
+            cursor: pointer;
+            margin: 0.25rem;
+        }
+
+        .btn:hover {
+            background: #5a67d8;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Admin Navigation Debug</h1>
+            <p>Testing navigation functionality without authentication</p>
+        </div>
+
+        <div class="debug-info" id="debugInfo">
+            Debug info will appear here...
+        </div>
+
+        <div class="nav">
+            <div class="nav-item active" data-section="dashboard">Dashboard</div>
+            <div class="nav-item" data-section="users">Users</div>
+            <div class="nav-item" data-section="questions">Questions</div>
+            <div class="nav-item" data-section="tips">Tips</div>
+            <div class="nav-item" data-section="categories">Categories</div>
+            <div class="nav-item" data-section="quizzes">Quiz Results</div>
+            <div class="nav-item" data-section="notifications">Notifications</div>
+            <div class="nav-item" data-section="analytics">Analytics</div>
+            <div class="nav-item" data-section="settings">Settings</div>
+        </div>
+
+        <div id="dashboard" class="content-section active">
+            <h2>Dashboard</h2>
+            <p>This is the dashboard section. Navigation is working if you can see this.</p>
+            <div class="debug-info">
+                <strong>Current Section:</strong> <span id="currentSection">dashboard</span><br>
+                <strong>Navigation Items Found:</strong> <span id="navCount">0</span><br>
+                <strong>Content Sections Found:</strong> <span id="sectionCount">0</span>
+            </div>
+        </div>
+
+        <div id="users" class="content-section">
+            <h2>User Management</h2>
+            <p>This is the users section.</p>
+        </div>
+
+        <div id="questions" class="content-section">
+            <h2>Question Management</h2>
+            <p>This is the questions section.</p>
+        </div>
+
+        <div id="tips" class="content-section">
+            <h2>Tip Management</h2>
+            <p>This is the tips section.</p>
+        </div>
+
+        <div id="categories" class="content-section">
+            <h2>Category Management</h2>
+            <p>This is the categories section.</p>
+        </div>
+
+        <div id="quizzes" class="content-section">
+            <h2>Quiz Results</h2>
+            <p>This is the quiz results section.</p>
+        </div>
+
+        <div id="notifications" class="content-section">
+            <h2>Notifications</h2>
+            <p>This is the notifications section.</p>
+        </div>
+
+        <div id="analytics" class="content-section">
+            <h2>Analytics</h2>
+            <p>This is the analytics section.</p>
+        </div>
+
+        <div id="settings" class="content-section">
+            <h2>Settings</h2>
+            <p>This is the settings section.</p>
+        </div>
+
+        <div style="margin-top: 2rem;">
+            <button class="btn" onclick="testNavigation()">Test Navigation</button>
+            <button class="btn" onclick="showDebugInfo()">Show Debug Info</button>
+            <button class="btn" onclick="clearDebug()">Clear Debug</button>
+        </div>
+    </div>
+
+    <script>
+        class DebugNavigation {
+            constructor() {
+                this.currentSection = 'dashboard';
+                this.debugLog = [];
+                this.init();
+            }
+
+            init() {
+                this.log('DebugNavigation: Initializing...');
+                this.setupEventListeners();
+                this.updateDebugInfo();
+                this.log('DebugNavigation: Initialization complete');
+            }
+
+            setupEventListeners() {
+                this.log('Setting up event listeners...');
+                
+                const navItems = document.querySelectorAll('.nav-item');
+                this.log(`Found ${navItems.length} navigation items`);
+                
+                navItems.forEach(item => {
+                    item.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        const section = item.dataset.section;
+                        this.log(`Navigation clicked: ${section}`);
+                        this.navigateToSection(section);
+                    });
+                });
+                
+                this.log('Event listeners setup complete');
+            }
+
+            navigateToSection(section) {
+                this.log(`Navigating to section: ${section}`);
+                
+                // Update active nav item
+                document.querySelectorAll('.nav-item').forEach(item => {
+                    item.classList.remove('active');
+                });
+                
+                const activeNavItem = document.querySelector(`[data-section="${section}"]`);
+                if (activeNavItem) {
+                    activeNavItem.classList.add('active');
+                    this.log(`Set active nav item: ${section}`);
+                } else {
+                    this.error(`Nav item not found for section: ${section}`);
+                }
+
+                // Hide all sections
+                const allSections = document.querySelectorAll('.content-section');
+                this.log(`Hiding ${allSections.length} sections`);
+                allSections.forEach(sectionEl => {
+                    sectionEl.classList.remove('active');
+                });
+
+                // Show target section
+                const targetSection = document.getElementById(section);
+                if (targetSection) {
+                    targetSection.classList.add('active');
+                    this.log(`Showed section: ${section}`);
+                } else {
+                    this.error(`Target section not found: ${section}`);
+                }
+
+                this.currentSection = section;
+                this.updateDebugInfo();
+            }
+
+            updateDebugInfo() {
+                const currentSectionEl = document.getElementById('currentSection');
+                const navCountEl = document.getElementById('navCount');
+                const sectionCountEl = document.getElementById('sectionCount');
+                
+                if (currentSectionEl) currentSectionEl.textContent = this.currentSection;
+                if (navCountEl) navCountEl.textContent = document.querySelectorAll('.nav-item').length;
+                if (sectionCountEl) sectionCountEl.textContent = document.querySelectorAll('.content-section').length;
+            }
+
+            log(message) {
+                const timestamp = new Date().toLocaleTimeString();
+                this.debugLog.push(`[${timestamp}] ${message}`);
+                console.log(`DebugNavigation: ${message}`);
+                this.updateDebugDisplay();
+            }
+
+            error(message) {
+                const timestamp = new Date().toLocaleTimeString();
+                this.debugLog.push(`[${timestamp}] ERROR: ${message}`);
+                console.error(`DebugNavigation: ${message}`);
+                this.updateDebugDisplay();
+            }
+
+            updateDebugDisplay() {
+                const debugInfo = document.getElementById('debugInfo');
+                if (debugInfo) {
+                    debugInfo.innerHTML = this.debugLog.slice(-10).join('<br>');
+                }
+            }
+
+            clearLog() {
+                this.debugLog = [];
+                this.updateDebugDisplay();
+            }
+        }
+
+        let debugNav;
+
+        function testNavigation() {
+            const sections = ['dashboard', 'users', 'questions', 'tips', 'categories', 'quizzes', 'notifications', 'analytics', 'settings'];
+            let currentIndex = 0;
+            
+            const interval = setInterval(() => {
+                if (currentIndex < sections.length) {
+                    debugNav.navigateToSection(sections[currentIndex]);
+                    currentIndex++;
+                } else {
+                    clearInterval(interval);
+                    debugNav.log('Navigation test complete');
+                }
+            }, 1000);
+        }
+
+        function showDebugInfo() {
+            debugNav.log('Debug info requested');
+            debugNav.updateDebugInfo();
+        }
+
+        function clearDebug() {
+            debugNav.clearLog();
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            debugNav = new DebugNavigation();
+        });
+    </script>
+</body>
+</html> 

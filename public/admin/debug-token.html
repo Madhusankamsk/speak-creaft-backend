@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Token Debug - SpeakCraft Admin</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f8fafc;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 1rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 2rem;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .title {
+            font-size: 1.875rem;
+            font-weight: 700;
+            color: #1e293b;
+            margin-bottom: 0.5rem;
+        }
+
+        .debug-section {
+            margin-bottom: 2rem;
+            padding: 1rem;
+            border: 1px solid #e2e8f0;
+            border-radius: 0.5rem;
+        }
+
+        .debug-section h3 {
+            margin-bottom: 1rem;
+            color: #374151;
+        }
+
+        .debug-info {
+            background: #f3f4f6;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            font-family: monospace;
+            font-size: 0.875rem;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            margin: 0.5rem;
+        }
+
+        .btn:hover {
+            background: #5a67d8;
+        }
+
+        .status {
+            padding: 0.5rem;
+            border-radius: 0.25rem;
+            margin: 0.5rem 0;
+            font-weight: 500;
+        }
+
+        .status.success {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .status.error {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .status.info {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 class="title">Token Debug Tool</h1>
+            <p>Debugging authentication and token issues</p>
+        </div>
+
+        <div class="debug-section">
+            <h3>Current Token Status</h3>
+            <div class="debug-info" id="tokenInfo">
+                Loading token information...
+            </div>
+        </div>
+
+        <div class="debug-section">
+            <h3>Token Verification Test</h3>
+            <button class="btn" onclick="testTokenVerification()">Test Token Verification</button>
+            <div class="debug-info" id="verificationResult">
+                Click "Test Token Verification" to see results...
+            </div>
+        </div>
+
+        <div class="debug-section">
+            <h3>API Endpoints Test</h3>
+            <button class="btn" onclick="testApiEndpoints()">Test All API Endpoints</button>
+            <div class="debug-info" id="apiResults">
+                Click "Test All API Endpoints" to see results...
+            </div>
+        </div>
+
+        <div class="debug-section">
+            <h3>Actions</h3>
+            <button class="btn" onclick="clearToken()">Clear Token</button>
+            <button class="btn" onclick="goToLogin()">Go to Login</button>
+            <button class="btn" onclick="goToAdmin()">Go to Admin Panel</button>
+        </div>
+    </div>
+
+    <script>
+        class TokenDebugger {
+            constructor() {
+                this.baseURL = window.location.origin + '/api';
+                this.init();
+            }
+
+            init() {
+                this.updateTokenInfo();
+            }
+
+            updateTokenInfo() {
+                const token = localStorage.getItem('adminToken');
+                const tokenInfo = document.getElementById('tokenInfo');
+                
+                if (token) {
+                    const tokenParts = token.split('.');
+                    let payload = 'Invalid token format';
+                    
+                    try {
+                        if (tokenParts.length === 3) {
+                            payload = JSON.parse(atob(tokenParts[1]));
+                        }
+                    } catch (e) {
+                        payload = 'Could not decode token payload';
+                    }
+
+                    tokenInfo.textContent = `Token Found: Yes
+Token Length: ${token.length} characters
+Token Format: ${tokenParts.length === 3 ? 'Valid JWT' : 'Invalid JWT'}
+Token Payload: ${JSON.stringify(payload, null, 2)}
+Token Preview: ${token.substring(0, 50)}...`;
+                } else {
+                    tokenInfo.textContent = 'No token found in localStorage';
+                }
+            }
+
+            async testTokenVerification() {
+                const result = document.getElementById('verificationResult');
+                result.textContent = 'Testing token verification...\n';
+                
+                const token = localStorage.getItem('adminToken');
+                if (!token) {
+                    result.textContent += '❌ No token found\n';
+                    return;
+                }
+
+                try {
+                    const response = await fetch(`${this.baseURL}/admin/verify`, {
+                        headers: {
+                            'Authorization': `Bearer ${token}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+
+                    const data = await response.json();
+                    
+                    result.textContent += `Response Status: ${response.status}\n`;
+                    result.textContent += `Response Data: ${JSON.stringify(data, null, 2)}\n`;
+                    
+                    if (response.ok && data.success) {
+                        result.textContent += '✅ Token verification successful\n';
+                    } else {
+                        result.textContent += '❌ Token verification failed\n';
+                    }
+                } catch (error) {
+                    result.textContent += `❌ Error: ${error.message}\n`;
+                }
+            }
+
+            async testApiEndpoints() {
+                const result = document.getElementById('apiResults');
+                result.textContent = 'Testing API endpoints...\n';
+                
+                const token = localStorage.getItem('adminToken');
+                if (!token) {
+                    result.textContent += '❌ No token found\n';
+                    return;
+                }
+
+                const endpoints = [
+                    '/admin/verify',
+                    '/admin/dashboard/stats',
+                    '/admin/users',
+                    '/admin/questions',
+                    '/admin/tips',
+                    '/admin/categories',
+                    '/admin/quiz-results',
+                    '/admin/notifications'
+                ];
+
+                for (const endpoint of endpoints) {
+                    try {
+                        const response = await fetch(`${this.baseURL}${endpoint}`, {
+                            headers: {
+                                'Authorization': `Bearer ${token}`,
+                                'Content-Type': 'application/json'
+                            }
+                        });
+
+                        const data = await response.json();
+                        
+                        result.textContent += `${endpoint}: ${response.status} ${response.ok ? '✅' : '❌'}\n`;
+                        
+                        if (!response.ok) {
+                            result.textContent += `  Error: ${data.message || 'Unknown error'}\n`;
+                        }
+                    } catch (error) {
+                        result.textContent += `${endpoint}: ❌ ${error.message}\n`;
+                    }
+                }
+            }
+
+            clearToken() {
+                localStorage.removeItem('adminToken');
+                this.updateTokenInfo();
+                document.getElementById('verificationResult').textContent = 'Token cleared.';
+                document.getElementById('apiResults').textContent = 'Token cleared.';
+            }
+
+            goToLogin() {
+                window.location.href = '/admin/login.html';
+            }
+
+            goToAdmin() {
+                window.location.href = '/admin/';
+            }
+        }
+
+        let tokenDebugger;
+
+        function testTokenVerification() {
+            tokenDebugger.testTokenVerification();
+        }
+
+        function testApiEndpoints() {
+            tokenDebugger.testApiEndpoints();
+        }
+
+        function clearToken() {
+            tokenDebugger.clearToken();
+        }
+
+        function goToLogin() {
+            tokenDebugger.goToLogin();
+        }
+
+        function goToAdmin() {
+            tokenDebugger.goToAdmin();
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            tokenDebugger = new TokenDebugger();
+        });
+    </script>
+</body>
+</html> 

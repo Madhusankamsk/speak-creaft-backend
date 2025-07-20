@@ -64,9 +64,24 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      scriptSrc: ["'self'"],
+      styleSrc: [
+        "'self'", 
+        "'unsafe-inline'",
+        "https://cdnjs.cloudflare.com",
+        "https://fonts.googleapis.com"
+      ],
+      scriptSrc: [
+        "'self'", 
+        "'unsafe-inline'",
+        "https://cdn.jsdelivr.net"
+      ],
+      fontSrc: [
+        "'self'",
+        "https://fonts.gstatic.com",
+        "https://cdnjs.cloudflare.com"
+      ],
       imgSrc: ["'self'", "data:", "https:"],
+      connectSrc: ["'self'"],
     },
   },
 }));
@@ -106,6 +121,19 @@ if (SERVER_CONFIG.NODE_ENV === 'development') {
 
 // Static files
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+
+// Admin panel static files
+app.use('/admin', express.static(path.join(__dirname, '../public/admin')));
+
+// Serve admin landing page for /admin route
+app.get('/admin', (req, res) => {
+  res.sendFile(path.join(__dirname, '../public/admin/landing.html'));
+});
+
+// Serve admin panel index.html for /admin/ route (with trailing slash)
+app.get('/admin/', (req, res) => {
+  res.sendFile(path.join(__dirname, '../public/admin/index.html'));
+});
 
 // Health check endpoint
 app.get('/health', (req, res) => {

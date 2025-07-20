@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Login Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .success { background-color: #d4edda; }
+        .error { background-color: #f8d7da; }
+        .info { background-color: #d1ecf1; }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+        }
+        pre {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔍 Admin Login Test Page</h1>
+    
+    <div class="test-section info">
+        <h3>📋 Test Instructions</h3>
+        <p>This page helps you test the admin login functionality step by step.</p>
+        <p><strong>Base URL:</strong> <span id="baseUrl"></span></p>
+    </div>
+
+    <div class="test-section">
+        <h3>1️⃣ Create Admin Account</h3>
+        <button onclick="createAdmin()">Create Admin</button>
+        <div id="createResult"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>2️⃣ Test Login</h3>
+        <button onclick="testLogin()">Test Login</button>
+        <div id="loginResult"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>3️⃣ Test Token Verification</h3>
+        <button onclick="testVerify()">Verify Token</button>
+        <div id="verifyResult"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>4️⃣ Test Dashboard Stats</h3>
+        <button onclick="testStats()">Get Stats</button>
+        <div id="statsResult"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>🔧 Manual Test</h3>
+        <form id="manualForm">
+            <label>Email: <input type="email" id="email" value="testadmin@speakcraft.com"></label><br><br>
+            <label>Password: <input type="password" id="password" value="test123456"></label><br><br>
+            <button type="submit">Manual Login</button>
+        </form>
+        <div id="manualResult"></div>
+    </div>
+
+    <script>
+        const baseURL = window.location.origin;
+        document.getElementById('baseUrl').textContent = baseURL;
+
+        let currentToken = null;
+
+        async function makeRequest(url, options = {}) {
+            try {
+                const response = await fetch(url, {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...options.headers
+                    },
+                    ...options
+                });
+                
+                const data = await response.json();
+                
+                return {
+                    success: response.ok,
+                    status: response.status,
+                    data: data
+                };
+            } catch (error) {
+                return {
+                    success: false,
+                    error: error.message
+                };
+            }
+        }
+
+        function showResult(elementId, result, isSuccess = true) {
+            const element = document.getElementById(elementId);
+            element.className = isSuccess ? 'success' : 'error';
+            element.innerHTML = `
+                <h4>${isSuccess ? '✅ Success' : '❌ Error'}</h4>
+                <pre>${JSON.stringify(result, null, 2)}</pre>
+            `;
+        }
+
+        async function createAdmin() {
+            const result = await makeRequest(`${baseURL}/api/admin/register`, {
+                method: 'POST',
+                body: JSON.stringify({
+                    name: 'Test Admin',
+                    email: 'testadmin@speakcraft.com',
+                    password: 'test123456',
+                    role: 'admin'
+                })
+            });
+            
+            showResult('createResult', result, result.success);
+        }
+
+        async function testLogin() {
+            const result = await makeRequest(`${baseURL}/api/admin/login`, {
+                method: 'POST',
+                body: JSON.stringify({
+                    email: 'testadmin@speakcraft.com',
+                    password: 'test123456'
+                })
+            });
+            
+            if (result.success && result.data.data && result.data.data.token) {
+                currentToken = result.data.data.token;
+                localStorage.setItem('adminToken', currentToken);
+            }
+            
+            showResult('loginResult', result, result.success);
+        }
+
+        async function testVerify() {
+            if (!currentToken) {
+                showResult('verifyResult', { error: 'No token available. Please login first.' }, false);
+                return;
+            }
+
+            const result = await makeRequest(`${baseURL}/api/admin/verify`, {
+                headers: {
+                    'Authorization': `Bearer ${currentToken}`
+                }
+            });
+            
+            showResult('verifyResult', result, result.success);
+        }
+
+        async function testStats() {
+            if (!currentToken) {
+                showResult('statsResult', { error: 'No token available. Please login first.' }, false);
+                return;
+            }
+
+            const result = await makeRequest(`${baseURL}/api/admin/dashboard/stats`, {
+                headers: {
+                    'Authorization': `Bearer ${currentToken}`
+                }
+            });
+            
+            showResult('statsResult', result, result.success);
+        }
+
+        // Manual form test
+        document.getElementById('manualForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            
+            const result = await makeRequest(`${baseURL}/api/admin/login`, {
+                method: 'POST',
+                body: JSON.stringify({ email, password })
+            });
+            
+            if (result.success && result.data.data && result.data.data.token) {
+                currentToken = result.data.data.token;
+                localStorage.setItem('adminToken', currentToken);
+            }
+            
+            showResult('manualResult', result, result.success);
+        });
+
+        // Check if server is running
+        window.addEventListener('load', async () => {
+            try {
+                const response = await fetch(`${baseURL}/health`);
+                if (response.ok) {
+                    console.log('✅ Server is running');
+                } else {
+                    console.log('❌ Server health check failed');
+                }
+            } catch (error) {
+                console.log('❌ Server is not running or not accessible');
+            }
+        });
+    </script>
+</body>
+</html> 
