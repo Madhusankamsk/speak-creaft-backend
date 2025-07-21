@@ -300,6 +300,75 @@ class AdminPanel {
         if (modalTitle) modalTitle.textContent = title;
         if (modalBody) modalBody.innerHTML = content;
         if (modalOverlay) modalOverlay.classList.add('active');
+
+        // Setup form event listeners if it's a question form
+        if (content.includes('questionForm')) {
+            setTimeout(() => this.setupQuestionFormListeners(), 100);
+        }
+    }
+
+    setupQuestionFormListeners() {
+        const form = document.getElementById('questionForm');
+        const modalClose = document.getElementById('modalClose');
+        const modalOverlay = document.getElementById('modalOverlay');
+
+        if (form) {
+            form.addEventListener('submit', (e) => this.handleQuestionSubmit(e));
+        }
+
+        if (modalClose) {
+            modalClose.addEventListener('click', () => this.closeModal());
+        }
+
+        if (modalOverlay) {
+            modalOverlay.addEventListener('click', (e) => {
+                if (e.target === modalOverlay) {
+                    this.closeModal();
+                }
+            });
+        }
+    }
+
+    async handleQuestionSubmit(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(e.target);
+        const questionId = formData.get('questionId');
+        const isEdit = !!questionId;
+        
+        const questionData = {
+            question: formData.get('question'),
+            categoryId: formData.get('category'),
+            difficulty: formData.get('difficulty'),
+            type: formData.get('type'),
+            options: formData.get('options').split('\n').filter(option => option.trim()),
+            correctAnswer: formData.get('correctAnswer'),
+            explanation: formData.get('explanation'),
+            isActive: formData.get('isActive') === 'on'
+        };
+
+        try {
+            let response;
+            if (isEdit) {
+                // Update existing question
+                response = await apiService.updateQuestion(questionId, questionData);
+            } else {
+                // Create new question
+                response = await apiService.createQuestion(questionData);
+            }
+
+            if (response.success) {
+                this.showNotification(
+                    isEdit ? 'Question updated successfully' : 'Question created successfully', 
+                    'success'
+                );
+                this.closeModal();
+                this.applyQuestionFilters(); // Refresh with current filters
+            }
+        } catch (error) {
+            console.error('Error saving question:', error);
+            this.showNotification('Error saving question', 'error');
+        }
     }
 
     closeModal() {
@@ -535,39 +604,422 @@ class AdminPanel {
         }
     }
 
-    async loadQuestions() {
-        console.log('Loading questions data...');
+    async loadQuestions(statusFilter = '') {
+        console.log('Loading questions data...', statusFilter ? `with status filter: ${statusFilter}` : 'showing all questions');
         try {
-            const response = await apiService.getQuestions();
+            const response = await apiService.getQuestions(statusFilter);
             if (response.success) {
                 const questions = response.data.questions || [];
-                const questionsTableBody = document.getElementById('questionsTableBody');
-                
-                if (questionsTableBody) {
-                    if (questions.length === 0) {
-                        questionsTableBody.innerHTML = '<tr><td colspan="6" class="text-center">No questions found</td></tr>';
-                    } else {
-                        const questionsHTML = questions.map(question => `
-                            <tr>
-                                <td>${question.question}</td>
-                                <td>${question.category?.name || 'N/A'}</td>
-                                <td>${question.difficulty || 'Medium'}</td>
-                                <td>${question.type || 'Multiple Choice'}</td>
-                                <td><span class="status ${question.isActive ? 'active' : 'inactive'}">${question.isActive ? 'Active' : 'Inactive'}</span></td>
-                                <td>
-                                    <button class="btn btn-sm btn-primary" onclick="editQuestion('${question._id}')">Edit</button>
-                                    <button class="btn btn-sm btn-danger" onclick="deleteQuestion('${question._id}')">Delete</button>
-                                </td>
-                            </tr>
-                        `).join('');
-                        
-                        questionsTableBody.innerHTML = questionsHTML;
-                    }
-                }
+                this.renderQuestions(questions);
             }
+            
+            // Set up Add Question button and load categories for filters
+            this.setupQuestionButtons();
+            this.loadCategoryFilters();
+            this.setupQuestionFilters();
         } catch (error) {
             console.error('Error loading questions:', error);
             this.showNotification('Error loading questions', 'error');
+        }
+    }
+
+    async loadCategoryFilters() {
+        try {
+            const response = await apiService.getCategories();
+            if (response.success) {
+                const categories = response.data.categories || [];
+                const categoryFilter = document.getElementById('categoryFilter');
+                
+                if (categoryFilter) {
+                    const categoryOptions = categories.map(cat => 
+                        `<option value="${cat._id}">${cat.name}</option>`
+                    ).join('');
+                    
+                    categoryFilter.innerHTML = `
+                        <option value="">All Categories</option>
+                        ${categoryOptions}
+                    `;
+                }
+            }
+        } catch (error) {
+            console.error('Error loading category filters:', error);
+        }
+    }
+
+    setupQuestionFilters() {
+        const categoryFilter = document.getElementById('categoryFilter');
+        const difficultyFilter = document.getElementById('difficultyFilter');
+        const statusFilter = document.getElementById('statusFilter');
+
+        if (categoryFilter) {
+            categoryFilter.addEventListener('change', () => this.applyQuestionFilters());
+        }
+        if (difficultyFilter) {
+            difficultyFilter.addEventListener('change', () => this.applyQuestionFilters());
+        }
+        if (statusFilter) {
+            statusFilter.addEventListener('change', () => this.applyQuestionFilters());
+        }
+
+        console.log('Question filters set up');
+    }
+
+    async applyQuestionFilters() {
+        const categoryFilter = document.getElementById('categoryFilter');
+        const difficultyFilter = document.getElementById('difficultyFilter');
+        const statusFilter = document.getElementById('statusFilter');
+
+        const filters = {};
+        
+        if (categoryFilter && categoryFilter.value) {
+            filters.category = categoryFilter.value;
+        }
+        if (difficultyFilter && difficultyFilter.value) {
+            filters.difficulty = difficultyFilter.value;
+        }
+        if (statusFilter && statusFilter.value) {
+            filters.status = statusFilter.value;
+        }
+
+        console.log('Applying filters:', filters);
+        await this.loadQuestionsWithFilters(filters);
+    }
+
+    async loadQuestionsWithFilters(filters = {}) {
+        console.log('Loading questions with filters:', filters);
+        try {
+            const response = await apiService.getQuestions(filters);
+            if (response.success) {
+                const questions = response.data.questions || [];
+                this.renderQuestions(questions);
+            }
+        } catch (error) {
+            console.error('Error loading questions with filters:', error);
+            this.showNotification('Error loading questions', 'error');
+        }
+    }
+
+    renderQuestions(questions) {
+        const questionsTableBody = document.getElementById('questionsTableBody');
+        
+        if (questionsTableBody) {
+            if (questions.length === 0) {
+                questionsTableBody.innerHTML = '<tr><td colspan="6" class="text-center">No questions found</td></tr>';
+            } else {
+                const questionsHTML = questions.map(question => {
+                    const difficulty = question.difficulty || 'medium';
+                    const difficultyText = difficulty.charAt(0).toUpperCase() + difficulty.slice(1);
+                    return `
+                        <tr data-question-id="${question._id}">
+                            <td>${this.truncateText(question.question, 50)}</td>
+                            <td>${question.categoryId?.name || 'N/A'}</td>
+                            <td><span class="badge badge-${this.getDifficultyClass(difficulty)}">${difficultyText}</span></td>
+                            <td>${question.type || 'Multiple Choice'}</td>
+                            <td><span class="status ${question.isActive ? 'active' : 'inactive'}">${question.isActive ? 'Active' : 'Inactive'}</span></td>
+                            <td>
+                                <button class="btn btn-sm btn-primary edit-question-btn" data-question-id="${question._id}">
+                                    <i class="fas fa-edit"></i> Edit
+                                </button>
+                                <button class="btn btn-sm btn-danger delete-question-btn" data-question-id="${question._id}">
+                                    <i class="fas fa-trash"></i> Delete
+                                </button>
+                                <button class="btn btn-sm btn-${question.isActive ? 'warning' : 'success'} toggle-status-btn" data-question-id="${question._id}">
+                                    <i class="fas fa-${question.isActive ? 'pause' : 'play'}"></i> ${question.isActive ? 'Deactivate' : 'Activate'}
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+                
+                questionsTableBody.innerHTML = questionsHTML;
+            }
+        }
+    }
+
+    setupQuestionButtons() {
+        const addQuestionBtn = document.getElementById('addQuestionBtn');
+        if (addQuestionBtn) {
+            // Remove existing listeners
+            addQuestionBtn.replaceWith(addQuestionBtn.cloneNode(true));
+            const newAddQuestionBtn = document.getElementById('addQuestionBtn');
+            
+            newAddQuestionBtn.addEventListener('click', async () => {
+                console.log('Add Question button clicked!');
+                await this.showAddQuestionModal();
+            });
+            console.log('Add Question button listener set up');
+        }
+
+        // Set up event delegation for question table buttons
+        this.setupQuestionTableHandlers();
+    }
+
+    setupQuestionTableHandlers() {
+        const questionsTable = document.getElementById('questionsTable');
+        if (!questionsTable) {
+            console.log('Questions table not found!');
+            return;
+        }
+
+        console.log('Found questions table:', questionsTable);
+
+        // Remove existing event listeners
+        questionsTable.removeEventListener('click', this.handleQuestionTableClick);
+        
+        // Add new event listener
+        questionsTable.addEventListener('click', this.handleQuestionTableClick.bind(this));
+        console.log('Question table event handlers set up successfully');
+        
+        // Test the event delegation
+        setTimeout(() => {
+            const testButton = questionsTable.querySelector('button');
+            if (testButton) {
+                console.log('Test button found:', testButton);
+                console.log('Test button classes:', testButton.className);
+            } else {
+                console.log('No buttons found in table yet');
+            }
+        }, 1000);
+    }
+
+    async handleQuestionTableClick(e) {
+        console.log('Table click event triggered:', e.target);
+        
+        const target = e.target.closest('button');
+        if (!target) {
+            console.log('No button found in click target');
+            return;
+        }
+
+        console.log('Button found:', target);
+        console.log('Button classes:', target.className);
+        console.log('Button dataset:', target.dataset);
+
+        const questionId = target.dataset.questionId;
+        if (!questionId) {
+            console.log('No question ID found in button dataset');
+            return;
+        }
+
+        console.log('Question table button clicked:', target.className, 'for question:', questionId);
+
+        try {
+            if (target.classList.contains('edit-question-btn')) {
+                console.log('Edit button clicked for question:', questionId);
+                await this.editQuestion(questionId);
+            } else if (target.classList.contains('delete-question-btn')) {
+                console.log('Delete button clicked for question:', questionId);
+                await this.deleteQuestion(questionId);
+            } else if (target.classList.contains('toggle-status-btn')) {
+                console.log('Toggle status button clicked for question:', questionId);
+                await this.toggleQuestionStatus(questionId);
+            } else {
+                console.log('Unknown button type:', target.className);
+            }
+        } catch (error) {
+            console.error('Error handling button click:', error);
+            this.showNotification('Error processing action', 'error');
+        }
+    }
+
+    truncateText(text, maxLength) {
+        if (!text) return '';
+        return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
+    }
+
+    getDifficultyClass(difficulty) {
+        if (!difficulty) return 'secondary';
+        
+        switch (difficulty.toLowerCase()) {
+            case 'easy': return 'success';
+            case 'medium': return 'warning';
+            case 'hard': return 'danger';
+            default: return 'secondary';
+        }
+    }
+
+    async showAddQuestionModal() {
+        console.log('Showing Add Question modal');
+        const formHTML = await this.getQuestionForm();
+        this.showModal('Add New Question', formHTML);
+    }
+
+    showEditQuestionModal(questionId) {
+        console.log('Loading question for edit:', questionId);
+        this.loadQuestionForEdit(questionId);
+    }
+
+    async loadQuestionForEdit(questionId) {
+        try {
+            const response = await apiService.getQuestion(questionId);
+            if (response.success) {
+                const question = response.data.question;
+                const formHTML = await this.getQuestionForm(question);
+                this.showModal('Edit Question', formHTML);
+            }
+        } catch (error) {
+            console.error('Error loading question:', error);
+            this.showNotification('Error loading question details', 'error');
+        }
+    }
+
+    async getQuestionForm(question = null) {
+        const isEdit = question !== null;
+        const questionText = question?.question || '';
+        const categoryId = question?.categoryId || '';
+        const difficulty = question?.difficulty || '';
+        const type = question?.type || '';
+        const options = question?.options ? question.options.join('\n') : '';
+        const correctAnswer = question?.correctAnswer || '';
+        const explanation = question?.explanation || '';
+        const isActive = question?.isActive !== false;
+
+        // Load categories from database
+        let categories = [];
+        try {
+            const response = await apiService.getCategories();
+            if (response.success) {
+                categories = response.data.categories || [];
+            }
+        } catch (error) {
+            console.error('Error loading categories:', error);
+        }
+
+        const categoryOptions = categories.map(cat => 
+            `<option value="${cat.name}" ${categoryId === cat.name ? 'selected' : ''}>${cat.name}</option>`
+        ).join('');
+
+        return `
+            <form id="questionForm">
+                ${isEdit ? `<input type="hidden" id="questionId" value="${question._id}">` : ''}
+                
+                <div class="form-group">
+                    <label for="questionText">Question Text *</label>
+                    <textarea id="questionText" name="question" required rows="3" placeholder="Enter the question text...">${questionText}</textarea>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="questionCategory">Category *</label>
+                        <select id="questionCategory" name="category" required>
+                            <option value="">Select Category</option>
+                            ${categoryOptions}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="questionDifficulty">Difficulty *</label>
+                        <select id="questionDifficulty" name="difficulty" required>
+                            <option value="">Select Difficulty</option>
+                            <option value="easy" ${difficulty === 'easy' ? 'selected' : ''}>Easy</option>
+                            <option value="medium" ${difficulty === 'medium' ? 'selected' : ''}>Medium</option>
+                            <option value="hard" ${difficulty === 'hard' ? 'selected' : ''}>Hard</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="questionType">Question Type *</label>
+                    <select id="questionType" name="type" required onchange="adminPanel.handleQuestionTypeChange()">
+                        <option value="">Select Type</option>
+                        <option value="multiple_choice" ${type === 'multiple_choice' ? 'selected' : ''}>Multiple Choice</option>
+                        <option value="true_false" ${type === 'true_false' ? 'selected' : ''}>True/False</option>
+                        <option value="fill_blank" ${type === 'fill_blank' ? 'selected' : ''}>Fill in the Blank</option>
+                    </select>
+                </div>
+
+                <div class="form-group" id="optionsGroup">
+                    <label for="questionOptions">Options (one per line) *</label>
+                    <textarea id="questionOptions" name="options" required rows="4" placeholder="Enter options, one per line...">${options}</textarea>
+                    <small class="form-help">For multiple choice: Enter 2-6 options. For true/false: Enter "True" and "False".</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="questionAnswer">Correct Answer *</label>
+                    <input type="text" id="questionAnswer" name="correctAnswer" required placeholder="Enter the correct answer..." value="${correctAnswer}">
+                </div>
+
+                <div class="form-group">
+                    <label for="questionExplanation">Explanation</label>
+                    <textarea id="questionExplanation" name="explanation" rows="2" placeholder="Optional explanation for the answer...">${explanation}</textarea>
+                </div>
+
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="questionActive" name="isActive" ${isActive ? 'checked' : ''}>
+                        <span class="checkmark"></span>
+                        Active Question
+                    </label>
+                </div>
+
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="adminPanel.closeModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> ${isEdit ? 'Update' : 'Save'} Question
+                    </button>
+                </div>
+            </form>
+        `;
+    }
+
+    handleQuestionTypeChange() {
+        const questionType = document.getElementById('questionType').value;
+        const questionOptions = document.getElementById('questionOptions');
+        const questionAnswer = document.getElementById('questionAnswer');
+
+        console.log('Question type changed to:', questionType);
+
+        switch (questionType) {
+            case 'multiple_choice':
+                questionOptions.placeholder = 'Enter 2-6 options, one per line...\nExample:\nOption A\nOption B\nOption C\nOption D';
+                questionAnswer.placeholder = 'Enter the correct option (e.g., Option A)';
+                break;
+
+            case 'true_false':
+                questionOptions.value = 'True\nFalse';
+                questionOptions.placeholder = 'True\nFalse';
+                questionAnswer.placeholder = 'Enter "True" or "False"';
+                break;
+
+            case 'fill_blank':
+                questionOptions.placeholder = 'Enter the correct answer for the blank';
+                questionAnswer.placeholder = 'Enter the correct answer for the blank';
+                break;
+
+            default:
+                questionOptions.placeholder = 'Enter options, one per line...';
+                questionAnswer.placeholder = 'Enter the correct answer...';
+        }
+    }
+
+    async editQuestion(questionId) {
+        this.showEditQuestionModal(questionId);
+    }
+
+    async deleteQuestion(questionId) {
+        if (!confirm('Are you sure you want to delete this question? This action cannot be undone.')) return;
+
+        try {
+            const response = await apiService.deleteQuestion(questionId);
+            if (response.success) {
+                this.showNotification('Question deleted successfully', 'success');
+                this.applyQuestionFilters(); // Refresh with current filters
+            }
+        } catch (error) {
+            console.error('Error deleting question:', error);
+            this.showNotification('Error deleting question', 'error');
+        }
+    }
+
+    async toggleQuestionStatus(questionId) {
+        try {
+            const response = await apiService.toggleQuestionStatus(questionId);
+            if (response.success) {
+                this.showNotification('Question status updated successfully', 'success');
+                this.applyQuestionFilters(); // Refresh with current filters
+            }
+        } catch (error) {
+            console.error('Error toggling question status:', error);
+            this.showNotification('Error updating question status', 'error');
         }
     }
 

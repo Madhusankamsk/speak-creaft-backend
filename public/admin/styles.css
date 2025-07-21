@@ -581,6 +581,8 @@ body {
 .btn-sm {
     padding: 0.5rem 0.75rem;
     font-size: 0.75rem;
+    cursor: pointer;
+    pointer-events: auto;
 }
 
 /* Tips Grid */
@@ -932,4 +934,164 @@ body {
     .action-buttons {
         flex-direction: column;
     }
+}
+
+/* Badge Variants */
+.badge-success {
+    background-color: #10b981;
+}
+
+.badge-warning {
+    background-color: #f59e0b;
+}
+
+.badge-danger {
+    background-color: #ef4444;
+}
+
+.badge-secondary {
+    background-color: #6b7280;
+}
+
+/* Table Badge Styles */
+.data-table .badge {
+    position: static;
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border-radius: 1rem;
+    color: white;
+    text-align: center;
+    min-width: auto;
+}
+
+/* Form Styles */
+.form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
+
+.form-group textarea {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid #d1d5db;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    font-family: inherit;
+    resize: vertical;
+    transition: border-color 0.3s ease;
+}
+
+.form-group textarea:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.form-group select {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid #d1d5db;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    background-color: white;
+    cursor: pointer;
+    transition: border-color 0.3s ease;
+}
+
+.form-group select:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    font-size: 0.875rem;
+}
+
+.checkbox-label input[type="checkbox"] {
+    width: auto;
+    margin: 0;
+}
+
+.form-actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: flex-end;
+    margin-top: 2rem;
+    padding-top: 1rem;
+    border-top: 1px solid #e5e7eb;
+}
+
+/* Status Styles */
+.status {
+    padding: 0.25rem 0.75rem;
+    border-radius: 1rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.status.active {
+    background-color: #dcfce7;
+    color: #166534;
+}
+
+.status.inactive {
+    background-color: #fef2f2;
+    color: #991b1b;
+}
+
+/* Button Variants */
+.btn-warning {
+    background-color: #f59e0b;
+    color: white;
+    border: none;
+}
+
+.btn-warning:hover {
+    background-color: #d97706;
+}
+
+/* Text Utilities */
+.text-center {
+    text-align: center;
+}
+
+/* Modal Improvements */
+.modal {
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.modal-body {
+    padding: 1.5rem;
+}
+
+/* Form Help Text */
+.form-help {
+    display: block;
+    margin-top: 0.25rem;
+    font-size: 0.875rem;
+    color: #6c757d;
+    font-style: italic;
+}
+
+/* Question Type Specific Styles */
+#fillBlankGroup {
+    background: #f8f9fa;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    border: 1px solid #dee2e6;
+    margin-bottom: 1rem;
+}
+
+#optionsGroup.hidden {
+    display: none;
 } 

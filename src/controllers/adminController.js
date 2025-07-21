@@ -410,16 +410,24 @@ const toggleUserStatus = async (req, res) => {
 const getQuestions = async (req, res) => {
   try {
     const { page, limit, skip } = getPaginationParams(req.query);
-    const { search, category, difficulty } = req.query;
+    const { search, category, difficulty, status } = req.query;
 
-    const filter = { isActive: true };
+    const filter = {};
+    
+    // Handle status filter
+    if (status === 'active') {
+      filter.isActive = true;
+    } else if (status === 'inactive') {
+      filter.isActive = false;
+    }
+    // If no status filter, show all questions (both active and inactive)
     
     if (search) {
       filter.question = { $regex: search, $options: 'i' };
     }
     
     if (category) {
-      filter.category = category;
+      filter.categoryId = category;
     }
     
     if (difficulty) {
@@ -428,7 +436,7 @@ const getQuestions = async (req, res) => {
 
     const [questions, total] = await Promise.all([
       Question.find(filter)
-        .populate('category', 'name')
+        .populate('categoryId', 'name')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit),
@@ -459,7 +467,7 @@ const getQuestion = async (req, res) => {
     const { id } = req.params;
 
     const question = await Question.findById(id)
-      .populate('category', 'name');
+      .populate('categoryId', 'name');
 
     if (!question) {
       return errorResponse(res, 'Question not found', 404);
@@ -479,11 +487,36 @@ const getQuestion = async (req, res) => {
 const createQuestion = async (req, res) => {
   try {
     const questionData = req.body;
+    
+    // Add the current admin as the creator
+    questionData.createdBy = req.admin._id;
+    
+    // Handle category mapping if categoryId is a string
+    if (typeof questionData.categoryId === 'string') {
+      // Find category by name
+      const category = await Category.findOne({ 
+        name: { $regex: new RegExp(questionData.categoryId, 'i') },
+        isActive: true 
+      });
+      
+      if (category) {
+        questionData.categoryId = category._id;
+      } else {
+        // If no category found, use the first available category
+        const defaultCategory = await Category.findOne({ isActive: true });
+        if (defaultCategory) {
+          questionData.categoryId = defaultCategory._id;
+        } else {
+          return errorResponse(res, 'No categories available', 400);
+        }
+      }
+    }
+    
     const question = new Question(questionData);
     await question.save();
 
     const populatedQuestion = await Question.findById(question._id)
-      .populate('category', 'name');
+      .populate('categoryId', 'name');
 
     return successResponse(res, { question: populatedQuestion }, 'Question created successfully');
 
@@ -505,7 +538,7 @@ const updateQuestion = async (req, res) => {
       id,
       questionData,
       { new: true, runValidators: true }
-    ).populate('category', 'name');
+    ).populate('categoryId', 'name');
 
     if (!question) {
       return errorResponse(res, 'Question not found', 404);
