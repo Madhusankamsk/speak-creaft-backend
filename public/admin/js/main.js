@@ -311,6 +311,7 @@ class AdminPanel {
         const form = document.getElementById('questionForm');
         const modalClose = document.getElementById('modalClose');
         const modalOverlay = document.getElementById('modalOverlay');
+        const cancelBtn = document.querySelector('.cancel-modal-btn');
 
         if (form) {
             form.addEventListener('submit', (e) => this.handleQuestionSubmit(e));
@@ -320,6 +321,10 @@ class AdminPanel {
             modalClose.addEventListener('click', () => this.closeModal());
         }
 
+        if (cancelBtn) {
+            cancelBtn.addEventListener('click', () => this.closeModal());
+        }
+
         if (modalOverlay) {
             modalOverlay.addEventListener('click', (e) => {
                 if (e.target === modalOverlay) {
@@ -327,6 +332,21 @@ class AdminPanel {
                 }
             });
         }
+
+        // Add event delegation for cancel button as fallback
+        document.addEventListener('click', (e) => {
+            if (e.target.classList.contains('cancel-modal-btn')) {
+                console.log('Cancel button clicked via event delegation');
+                this.closeModal();
+            }
+        });
+
+        console.log('Question form listeners set up:', {
+            form: !!form,
+            modalClose: !!modalClose,
+            cancelBtn: !!cancelBtn,
+            modalOverlay: !!modalOverlay
+        });
     }
 
     async handleQuestionSubmit(e) {
@@ -372,8 +392,14 @@ class AdminPanel {
     }
 
     closeModal() {
+        console.log('closeModal called');
         const modalOverlay = document.getElementById('modalOverlay');
-        if (modalOverlay) modalOverlay.classList.remove('active');
+        if (modalOverlay) {
+            modalOverlay.classList.remove('active');
+            console.log('Modal closed successfully');
+        } else {
+            console.log('Modal overlay not found');
+        }
     }
 
     // Notification system
@@ -952,7 +978,7 @@ class AdminPanel {
                 </div>
 
                 <div class="form-actions">
-                    <button type="button" class="btn btn-secondary" onclick="adminPanel.closeModal()">Cancel</button>
+                    <button type="button" class="btn btn-secondary cancel-modal-btn">Cancel</button>
                     <button type="submit" class="btn btn-primary">
                         <i class="fas fa-save"></i> ${isEdit ? 'Update' : 'Save'} Question
                     </button>
