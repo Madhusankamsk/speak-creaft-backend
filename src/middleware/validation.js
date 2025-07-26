@@ -103,9 +103,9 @@ const validateQuizSubmission = [
     .isMongoId()
     .withMessage('Each answer must have a valid question ID'),
   
-  body('answers.*.selectedOption')
-    .isIn(['A', 'B', 'C', 'D'])
-    .withMessage('Selected option must be A, B, C, or D'),
+  body('answers.*.userAnswer')
+    .notEmpty()
+    .withMessage('User answer is required'),
   
   body('timeSpent')
     .optional()
