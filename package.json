@@ -12,7 +12,8 @@
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
     "seed": "node scripts/seed.js",
-    "build": "echo 'No build step required for Node.js'"
+    "build": "echo 'No build step required for Node.js'",
+    "deploy": "npm install && npm start"
   },
   "keywords": [
     "language-learning",

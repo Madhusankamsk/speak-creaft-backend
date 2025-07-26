@@ -122,18 +122,24 @@ if (SERVER_CONFIG.NODE_ENV === 'development') {
 // Static files
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
-// Admin panel static files
-app.use('/admin', express.static(path.join(__dirname, '../public/admin')));
+// Serve React app static files
+app.use(express.static(path.join(__dirname, '../public')));
 
-// Serve admin landing page for /admin route
-app.get('/admin', (req, res) => {
-  res.sendFile(path.join(__dirname, '../public/admin/landing.html'));
-});
+// Admin panel static files (if admin folder exists)
+const adminPath = path.join(__dirname, '../public/admin');
+if (require('fs').existsSync(adminPath)) {
+  app.use('/admin', express.static(adminPath));
+  
+  // Serve admin landing page for /admin route
+  app.get('/admin', (req, res) => {
+    res.sendFile(path.join(__dirname, '../public/admin/landing.html'));
+  });
 
-// Serve admin panel index.html for /admin/ route (with trailing slash)
-app.get('/admin/', (req, res) => {
-  res.sendFile(path.join(__dirname, '../public/admin/index.html'));
-});
+  // Serve admin panel index.html for /admin/ route (with trailing slash)
+  app.get('/admin/', (req, res) => {
+    res.sendFile(path.join(__dirname, '../public/admin/index.html'));
+  });
+}
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -177,13 +183,28 @@ app.get('/api', (req, res) => {
   });
 });
 
-// 404 handler
-app.use('*', (req, res) => {
-  res.status(404).json({
-    success: false,
-    message: 'Route not found',
-    error: true
-  });
+// Serve React app for all non-API routes (SPA routing)
+app.get('*', (req, res) => {
+  // Skip API routes
+  if (req.path.startsWith('/api/')) {
+    return res.status(404).json({
+      success: false,
+      message: 'Route not found',
+      error: true
+    });
+  }
+  
+  // Skip admin routes if they exist
+  if (req.path.startsWith('/admin/')) {
+    return res.status(404).json({
+      success: false,
+      message: 'Route not found',
+      error: true
+    });
+  }
+  
+  // Serve React app index.html for all other routes
+  res.sendFile(path.join(__dirname, '../public/index.html'));
 });
 
 // Error handling middleware (must be last)
