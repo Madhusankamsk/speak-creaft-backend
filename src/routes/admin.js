@@ -54,8 +54,11 @@ router.delete('/quiz-results/:id', adminController.deleteQuizResult);
 
 // Notifications
 router.get('/notifications', adminController.getNotifications);
+router.get('/notifications/stats', adminController.getNotificationStats);
 router.post('/notifications', adminController.sendNotification);
 router.delete('/notifications/:id', adminController.deleteNotification);
+router.patch('/notifications/:id/read', adminController.markNotificationAsRead);
+router.patch('/notifications/read-all', adminController.markAllNotificationsAsRead);
 
 // Analytics
 router.get('/analytics', adminController.getAnalytics);

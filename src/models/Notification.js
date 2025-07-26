@@ -59,6 +59,11 @@ const notificationSchema = new mongoose.Schema({
       date.setDate(date.getDate() + 7);
       return date;
     }
+  },
+  createdBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Admin',
+    required: false
   }
 }, {
   timestamps: true

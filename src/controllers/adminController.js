@@ -127,36 +127,74 @@ const getDashboardStats = async (req, res) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // Get statistics
-    const [
-      totalUsers,
-      totalQuestions,
-      totalTips,
-      completedQuizzes
-    ] = await Promise.all([
-      User.countDocuments({ isActive: true }),
-      Question.countDocuments({ isActive: true }),
-      Tip.countDocuments({ isActive: true }),
-      User.countDocuments({ quizCompleted: true })
-    ]);
+    // Get statistics with error handling
+    let totalUsers = 0, totalQuestions = 0, totalTips = 0, totalCategories = 0, totalQuizResults = 0, completedQuizzes = 0;
+    
+    try {
+      [
+        totalUsers,
+        totalQuestions,
+        totalTips,
+        totalCategories,
+        totalQuizResults,
+        completedQuizzes
+      ] = await Promise.all([
+        User.countDocuments({ isActive: true }),
+        Question.countDocuments({ isActive: true }),
+        Tip.countDocuments({ isActive: true }),
+        Category.countDocuments({ isActive: true }),
+        UserQuiz.countDocuments(),
+        User.countDocuments({ quizCompleted: true })
+      ]);
+    } catch (error) {
+      console.error('Error fetching dashboard statistics:', error);
+      // Continue with default values
+    }
+
+    // Calculate average score from quiz results
+    let averageScore = 0;
+    try {
+      const quizResults = await UserQuiz.find({}, 'score totalQuestions');
+      if (quizResults.length > 0) {
+        const totalScore = quizResults.reduce((sum, result) => {
+          const percentage = result.totalQuestions > 0 ? (result.score / result.totalQuestions) * 100 : 0;
+          return sum + percentage;
+        }, 0);
+        averageScore = totalScore / quizResults.length;
+      }
+    } catch (error) {
+      console.error('Error calculating average score:', error);
+      averageScore = 0;
+    }
 
     // Get user growth data (last 7 days)
     const userGrowth = [];
     const labels = [];
-    for (let i = 6; i >= 0; i--) {
-      const date = new Date();
-      date.setDate(date.getDate() - i);
-      date.setHours(0, 0, 0, 0);
-      
-      const nextDate = new Date(date);
-      nextDate.setDate(nextDate.getDate() + 1);
-      
-      const count = await User.countDocuments({
-        createdAt: { $gte: date, $lt: nextDate }
-      });
-      
-      userGrowth.push(count);
-      labels.push(date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
+    try {
+      for (let i = 6; i >= 0; i--) {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        date.setHours(0, 0, 0, 0);
+        
+        const nextDate = new Date(date);
+        nextDate.setDate(nextDate.getDate() + 1);
+        
+        const count = await User.countDocuments({
+          createdAt: { $gte: date, $lt: nextDate }
+        });
+        
+        userGrowth.push(count);
+        labels.push(date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
+      }
+    } catch (error) {
+      console.error('Error fetching user growth data:', error);
+      // Use default values
+      for (let i = 6; i >= 0; i--) {
+        userGrowth.push(0);
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        labels.push(date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
+      }
     }
 
     // Get quiz performance data
@@ -165,24 +203,32 @@ const getDashboardStats = async (req, res) => {
       datasets: []
     };
 
-    const levelCounts = await User.aggregate([
-      { $match: { quizCompleted: true } },
-      { $group: { _id: '$level', count: { $sum: 1 } } }
-    ]);
+    try {
+      const levelCounts = await User.aggregate([
+        { $match: { quizCompleted: true } },
+        { $group: { _id: '$level', count: { $sum: 1 } } }
+      ]);
 
-    const levelData = [0, 0, 0, 0];
-    levelCounts.forEach(item => {
-      if (item._id >= 0 && item._id < 4) {
-        levelData[item._id] = item.count;
-      }
-    });
+      const levelData = [0, 0, 0, 0];
+      levelCounts.forEach(item => {
+        if (item._id >= 0 && item._id < 4) {
+          levelData[item._id] = item.count;
+        }
+      });
 
-    quizPerformance.datasets = levelData;
+      quizPerformance.datasets = levelData;
+    } catch (error) {
+      console.error('Error fetching quiz performance data:', error);
+      quizPerformance.datasets = [0, 0, 0, 0];
+    }
 
     return successResponse(res, {
       totalUsers,
       totalQuestions,
       totalTips,
+      totalCategories,
+      totalQuizResults,
+      averageScore,
       completedQuizzes,
       userGrowth: {
         labels,
@@ -414,13 +460,17 @@ const getQuestions = async (req, res) => {
 
     const filter = {};
     
-    // Handle status filter
+    // Handle status filter - default to active questions only
     if (status === 'active') {
       filter.isActive = true;
     } else if (status === 'inactive') {
       filter.isActive = false;
+    } else if (status === 'all') {
+      // Show all questions (both active and inactive)
+    } else {
+      // Default: show only active questions
+      filter.isActive = true;
     }
-    // If no status filter, show all questions (both active and inactive)
     
     if (search) {
       filter.question = { $regex: search, $options: 'i' };
@@ -601,25 +651,44 @@ const toggleQuestionStatus = async (req, res) => {
 const getTips = async (req, res) => {
   try {
     const { page, limit, skip } = getPaginationParams(req.query);
-    const { search, category, level } = req.query;
+    const { search, category, difficulty, type, status } = req.query;
 
-    const filter = { isActive: true };
+    const filter = {};
+    
+    // Handle status filter - default to active tips only
+    if (status === 'active') {
+      filter.isActive = true;
+    } else if (status === 'inactive') {
+      filter.isActive = false;
+    } else if (status === 'all') {
+      // Show all tips (both active and inactive)
+    } else {
+      // Default: show only active tips
+      filter.isActive = true;
+    }
     
     if (search) {
-      filter.title = { $regex: search, $options: 'i' };
+      filter.$or = [
+        { title: { $regex: search, $options: 'i' } },
+        { content: { $regex: search, $options: 'i' } }
+      ];
     }
     
     if (category) {
-      filter.category = category;
+      filter.categoryId = category;
     }
     
-    if (level) {
-      filter.level = parseInt(level);
+    if (difficulty) {
+      filter.difficulty = difficulty;
+    }
+    
+    if (type) {
+      filter.type = type;
     }
 
     const [tips, total] = await Promise.all([
       Tip.find(filter)
-        .populate('category', 'name')
+        .populate('categoryId', 'name')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit),
@@ -670,11 +739,21 @@ const getTip = async (req, res) => {
 const createTip = async (req, res) => {
   try {
     const tipData = req.body;
+    
+    // Add the current admin as the creator
+    tipData.createdBy = req.admin._id;
+    
+    // Handle category mapping if category is sent instead of categoryId
+    if (tipData.category && !tipData.categoryId) {
+      tipData.categoryId = tipData.category;
+      delete tipData.category;
+    }
+    
     const tip = new Tip(tipData);
     await tip.save();
 
     const populatedTip = await Tip.findById(tip._id)
-      .populate('category', 'name');
+      .populate('categoryId', 'name');
 
     return successResponse(res, { tip: populatedTip }, 'Tip created successfully');
 
@@ -691,12 +770,18 @@ const updateTip = async (req, res) => {
   try {
     const { id } = req.params;
     const tipData = req.body;
+    
+    // Handle category mapping if category is sent instead of categoryId
+    if (tipData.category && !tipData.categoryId) {
+      tipData.categoryId = tipData.category;
+      delete tipData.category;
+    }
 
     const tip = await Tip.findByIdAndUpdate(
       id,
       tipData,
       { new: true, runValidators: true }
-    ).populate('category', 'name');
+    ).populate('categoryId', 'name');
 
     if (!tip) {
       return errorResponse(res, 'Tip not found', 404);
@@ -759,9 +844,25 @@ const toggleTipStatus = async (req, res) => {
 const getCategories = async (req, res) => {
   try {
     const categories = await Category.find({ isActive: true })
-      .sort({ name: 1 });
+      .sort({ order: 1, name: 1 });
 
-    return successResponse(res, { categories }, 'Categories retrieved successfully');
+    // Get question and tip counts for each category
+    const categoriesWithCounts = await Promise.all(
+      categories.map(async (category) => {
+        const [questionCount, tipCount] = await Promise.all([
+          Question.countDocuments({ category: category._id, isActive: true }),
+          Tip.countDocuments({ category: category._id, isActive: true })
+        ]);
+
+        return {
+          ...category.toObject(),
+          questionCount,
+          tipCount
+        };
+      })
+    );
+
+    return successResponse(res, { categories: categoriesWithCounts }, 'Categories retrieved successfully');
 
   } catch (error) {
     console.error('Get categories error:', error);
@@ -794,7 +895,10 @@ const getCategory = async (req, res) => {
 // @access  Private (Admin)
 const createCategory = async (req, res) => {
   try {
-    const categoryData = req.body;
+    const categoryData = {
+      ...req.body,
+      createdBy: req.admin._id
+    };
     const category = new Category(categoryData);
     await category.save();
 
@@ -863,26 +967,26 @@ const getQuizResults = async (req, res) => {
     const filter = {};
     
     if (level) {
-      filter.level = parseInt(level);
+      filter.assignedLevel = parseInt(level);
     }
     
     if (dateFrom || dateTo) {
-      filter.quizDate = {};
-      if (dateFrom) filter.quizDate.$gte = new Date(dateFrom);
-      if (dateTo) filter.quizDate.$lte = new Date(dateTo);
+      filter.completedAt = {};
+      if (dateFrom) filter.completedAt.$gte = new Date(dateFrom);
+      if (dateTo) filter.completedAt.$lte = new Date(dateTo);
     }
 
-    const [users, total] = await Promise.all([
-      User.find(filter)
-        .select('name email level quizScore quizTotalQuestions quizPercentage quizDate')
-        .sort({ quizDate: -1 })
+    const [quizResults, total] = await Promise.all([
+      UserQuiz.find(filter)
+        .populate('userId', 'name email')
+        .sort({ completedAt: -1 })
         .skip(skip)
         .limit(limit),
-      User.countDocuments(filter)
+      UserQuiz.countDocuments(filter)
     ]);
 
     return successResponse(res, {
-      quizResults: users,
+      quizResults,
       pagination: {
         page,
         limit,
@@ -904,14 +1008,14 @@ const getQuizResult = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const user = await User.findById(id)
-      .select('name email level quizScore quizTotalQuestions quizPercentage quizDate');
+    const quizResult = await UserQuiz.findById(id)
+      .populate('userId', 'name email');
 
-    if (!user) {
+    if (!quizResult) {
       return errorResponse(res, 'Quiz result not found', 404);
     }
 
-    return successResponse(res, { quizResult: user }, 'Quiz result retrieved successfully');
+    return successResponse(res, { quizResult }, 'Quiz result retrieved successfully');
 
   } catch (error) {
     console.error('Get quiz result error:', error);
@@ -926,16 +1030,22 @@ const deleteQuizResult = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const user = await User.findByIdAndUpdate(id, {
-      quizCompleted: false,
-      quizScore: null,
-      quizTotalQuestions: null,
-      quizPercentage: null,
-      quizDate: null
-    });
-
-    if (!user) {
+    const quizResult = await UserQuiz.findById(id);
+    if (!quizResult) {
       return errorResponse(res, 'Quiz result not found', 404);
+    }
+
+    // Delete the quiz result
+    await UserQuiz.findByIdAndDelete(id);
+
+    // Update user's quiz completion status if this was their only quiz
+    const remainingQuizzes = await UserQuiz.countDocuments({ userId: quizResult.userId });
+    if (remainingQuizzes === 0) {
+      await User.findByIdAndUpdate(quizResult.userId, {
+        quizCompleted: false,
+        quizScore: null,
+        quizDate: null
+      });
     }
 
     return successResponse(res, {}, 'Quiz result deleted successfully');
@@ -951,11 +1061,35 @@ const deleteQuizResult = async (req, res) => {
 // @access  Private (Admin)
 const getNotifications = async (req, res) => {
   try {
-    const notifications = await Notification.find()
-      .sort({ createdAt: -1 })
-      .limit(50);
+    const { page = 1, limit = 20, type, isRead, userId } = req.query;
+    const skip = (page - 1) * limit;
 
-    return successResponse(res, { notifications }, 'Notifications retrieved successfully');
+    // Build filter
+    const filter = {};
+    if (type) filter.type = type;
+    if (isRead !== undefined) filter.isRead = isRead === 'true';
+    if (userId) filter.userId = userId;
+
+    const [notifications, total] = await Promise.all([
+      Notification.find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(parseInt(limit))
+        .populate('userId', 'name email')
+        .populate('data.tipId', 'title')
+        .populate('data.categoryId', 'name'),
+      Notification.countDocuments(filter)
+    ]);
+
+    return successResponse(res, {
+      notifications,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / limit)
+      }
+    }, 'Notifications retrieved successfully');
 
   } catch (error) {
     console.error('Get notifications error:', error);
@@ -968,18 +1102,57 @@ const getNotifications = async (req, res) => {
 // @access  Private (Admin)
 const sendNotification = async (req, res) => {
   try {
-    const { title, message, type, targetUsers } = req.body;
+    const { title, message, type, targetUsers, userIds, categoryId, tipId } = req.body;
 
-    const notification = new Notification({
-      title,
-      message,
-      type,
-      targetUsers: targetUsers || 'all'
-    });
+    // Validate required fields
+    if (!title || !message || !type) {
+      return errorResponse(res, 'Title, message, and type are required', 400);
+    }
 
-    await notification.save();
+    let notifications = [];
 
-    return successResponse(res, { notification }, 'Notification sent successfully');
+    // If specific user IDs are provided
+    if (userIds && userIds.length > 0) {
+      for (const userId of userIds) {
+        const notification = new Notification({
+          userId,
+          title,
+          message,
+          type,
+          data: {
+            tipId,
+            categoryId
+          },
+          createdBy: req.admin._id
+        });
+        notifications.push(notification);
+      }
+    } else {
+      // Send to all active users
+      const users = await User.find({ isActive: true });
+      for (const user of users) {
+        const notification = new Notification({
+          userId: user._id,
+          title,
+          message,
+          type,
+          data: {
+            tipId,
+            categoryId
+          },
+          createdBy: req.admin._id
+        });
+        notifications.push(notification);
+      }
+    }
+
+    // Save all notifications
+    const savedNotifications = await Notification.insertMany(notifications);
+
+    return successResponse(res, { 
+      notifications: savedNotifications,
+      count: savedNotifications.length 
+    }, 'Notifications sent successfully');
 
   } catch (error) {
     console.error('Send notification error:', error);
@@ -1003,6 +1176,88 @@ const deleteNotification = async (req, res) => {
 
   } catch (error) {
     console.error('Delete notification error:', error);
+    return errorResponse(res, ERROR_MESSAGES.INTERNAL_ERROR, 500);
+  }
+};
+
+// @desc    Mark notification as read
+// @route   PATCH /api/admin/notifications/:id/read
+// @access  Private (Admin)
+const markNotificationAsRead = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const notification = await Notification.findById(id);
+    if (!notification) {
+      return errorResponse(res, 'Notification not found', 404);
+    }
+
+    await notification.markAsRead();
+
+    return successResponse(res, { notification }, 'Notification marked as read');
+
+  } catch (error) {
+    console.error('Mark notification as read error:', error);
+    return errorResponse(res, ERROR_MESSAGES.INTERNAL_ERROR, 500);
+  }
+};
+
+// @desc    Mark all notifications as read
+// @route   PATCH /api/admin/notifications/read-all
+// @access  Private (Admin)
+const markAllNotificationsAsRead = async (req, res) => {
+  try {
+    const result = await Notification.updateMany(
+      { isRead: false },
+      { 
+        isRead: true, 
+        readAt: new Date() 
+      }
+    );
+
+    return successResponse(res, { 
+      updatedCount: result.modifiedCount 
+    }, 'All notifications marked as read');
+
+  } catch (error) {
+    console.error('Mark all notifications as read error:', error);
+    return errorResponse(res, ERROR_MESSAGES.INTERNAL_ERROR, 500);
+  }
+};
+
+// @desc    Get notification statistics
+// @route   GET /api/admin/notifications/stats
+// @access  Private (Admin)
+const getNotificationStats = async (req, res) => {
+  try {
+    const [totalNotifications, unreadCount, readCount, typeStats] = await Promise.all([
+      Notification.countDocuments(),
+      Notification.countDocuments({ isRead: false }),
+      Notification.countDocuments({ isRead: true }),
+      Notification.aggregate([
+        {
+          $group: {
+            _id: '$type',
+            count: { $sum: 1 }
+          }
+        }
+      ])
+    ]);
+
+    const stats = {
+      total: totalNotifications,
+      unread: unreadCount,
+      read: readCount,
+      byType: typeStats.reduce((acc, stat) => {
+        acc[stat._id] = stat.count;
+        return acc;
+      }, {})
+    };
+
+    return successResponse(res, stats, 'Notification statistics retrieved successfully');
+
+  } catch (error) {
+    console.error('Get notification stats error:', error);
     return errorResponse(res, ERROR_MESSAGES.INTERNAL_ERROR, 500);
   }
 };
@@ -1199,6 +1454,9 @@ module.exports = {
   getNotifications,
   sendNotification,
   deleteNotification,
+  markNotificationAsRead,
+  markAllNotificationsAsRead,
+  getNotificationStats,
   getAnalytics,
   getUserGrowth,
   getQuizPerformance,
