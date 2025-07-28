@@ -14,9 +14,9 @@ const { userAuth } = require('../middleware/auth');
 
 // Public routes
 router.get('/questions', getQuestions);
-router.post('/submit', validateQuizSubmission, submitQuiz);
 
 // Protected routes
+router.post('/submit', userAuth, validateQuizSubmission, submitQuiz);
 router.get('/status', userAuth, getQuizStatus);
 router.get('/history', userAuth, validatePagination, getQuizHistory);
 

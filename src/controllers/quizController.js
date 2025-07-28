@@ -54,6 +54,10 @@ const submitQuiz = async (req, res) => {
   try {
     const { answers } = req.body;
     const userId = req.user ? req.user._id : null;
+    
+    console.log('Quiz submission - User ID:', userId);
+    console.log('Quiz submission - User object:', req.user);
+    console.log('Quiz submission - Answers:', answers);
 
     // Get all questions
     const questions = await Question.find({ isActive: true });
@@ -96,6 +100,8 @@ const submitQuiz = async (req, res) => {
 
     // Save quiz results if user is authenticated
     if (userId) {
+      console.log('Saving quiz results to database for user:', userId);
+      
       const userQuiz = await UserQuiz.create({
         userId,
         score: correctAnswers,
@@ -105,14 +111,20 @@ const submitQuiz = async (req, res) => {
         answers: detailedAnswers,
         assignedLevel: level
       });
+      
+      console.log('UserQuiz created:', userQuiz);
 
       // Update user
-      await User.findByIdAndUpdate(userId, {
+      const updatedUser = await User.findByIdAndUpdate(userId, {
         level,
         quizCompleted: true,
         quizScore: correctAnswers,
         quizDate: new Date()
-      });
+      }, { new: true });
+      
+      console.log('User updated:', updatedUser);
+    } else {
+      console.log('No user ID found - quiz results not saved to database');
     }
 
     return successResponse(res, {
@@ -136,6 +148,10 @@ const submitQuiz = async (req, res) => {
 const getQuizStatus = async (req, res) => {
   try {
     const user = req.user;
+    
+    console.log('Quiz status check - User:', user);
+    console.log('Quiz status check - User ID:', user._id);
+    console.log('Quiz status check - Quiz completed:', user.quizCompleted);
 
     return successResponse(res, {
       quizCompleted: user.quizCompleted,
