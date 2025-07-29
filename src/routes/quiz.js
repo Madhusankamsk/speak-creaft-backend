@@ -4,7 +4,9 @@ const {
   getQuestions, 
   submitQuiz, 
   getQuizStatus, 
-  getQuizHistory 
+  getQuizHistory,
+  debugQuizInfo,
+  testDatabase
 } = require('../controllers/quizController');
 const { 
   validateQuizSubmission, 
@@ -19,5 +21,7 @@ router.get('/questions', getQuestions);
 router.post('/submit', userAuth, validateQuizSubmission, submitQuiz);
 router.get('/status', userAuth, getQuizStatus);
 router.get('/history', userAuth, validatePagination, getQuizHistory);
+router.get('/debug', userAuth, debugQuizInfo);
+router.get('/test-db', userAuth, testDatabase);
 
 module.exports = router; 

@@ -107,10 +107,15 @@ const validateQuizSubmission = [
     .notEmpty()
     .withMessage('User answer is required'),
   
+  body('answers.*.timeSpent')
+    .optional()
+    .isInt({ min: 0 })
+    .withMessage('Time spent in answer must be a positive integer'),
+  
   body('timeSpent')
     .optional()
     .isInt({ min: 0 })
-    .withMessage('Time spent must be a positive integer'),
+    .withMessage('Total time spent must be a positive integer'),
   
   handleValidationErrors
 ];
