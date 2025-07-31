@@ -120,13 +120,14 @@ const getUserTips = async (req, res) => {
   }
 };
 
-// @desc    Mark tip as read
+// @desc    Toggle tip read status
 // @route   POST /api/tips/:tipId/read
 // @access  Private
 const markAsRead = async (req, res) => {
   try {
     const { tipId } = req.params;
     const userId = req.user._id;
+    const { isRead } = req.body; // Optional: explicitly set read status
 
     // Check if tip exists
     const tip = await Tip.findById(tipId);
@@ -134,35 +135,49 @@ const markAsRead = async (req, res) => {
       return errorResponse(res, 'Tip not found', 404);
     }
 
-    // Check if tip is unlocked for user
-    const interaction = await UserTipInteraction.findOne({
-      userId,
-      tipId,
-      isUnlocked: true
-    });
+    // Allow marking as read/unread for any tip that exists
+    // If user can access the tip through the frontend, they should be able to mark it as read/unread
+    // The frontend controls what tips are shown to users
 
-    if (!interaction) {
-      return errorResponse(res, ERROR_MESSAGES.TIP_NOT_UNLOCKED, 403);
+    // Get existing interaction to determine current state
+    const existingInteraction = await UserTipInteraction.findOne({ userId, tipId });
+    
+    // Determine new read status
+    let newReadStatus;
+    if (typeof isRead === 'boolean') {
+      // Explicitly set read status from request body
+      newReadStatus = isRead;
+    } else {
+      // Toggle current read status
+      newReadStatus = existingInteraction ? !existingInteraction.isRead : true;
     }
 
-    // Update or create interaction
-    await UserTipInteraction.findOneAndUpdate(
+    // Prepare update data
+    const updateData = { 
+      isRead: newReadStatus,
+      readAt: newReadStatus ? new Date() : null,
+      isUnlocked: true
+    };
+
+    // Set unlockedAt if not already set
+    if (!existingInteraction || !existingInteraction.unlockedAt) {
+      updateData.unlockedAt = new Date();
+    }
+
+    const updatedInteraction = await UserTipInteraction.findOneAndUpdate(
       { userId, tipId },
-      { 
-        isRead: true,
-        readAt: new Date()
-      },
+      updateData,
       { upsert: true, new: true }
     );
 
     return successResponse(res, {
       tipId,
-      isRead: true,
-      readAt: new Date()
-    }, SUCCESS_MESSAGES.TIP_READ);
+      isRead: updatedInteraction.isRead,
+      readAt: updatedInteraction.readAt
+    }, updatedInteraction.isRead ? SUCCESS_MESSAGES.TIP_READ : 'Tip marked as unread successfully');
 
   } catch (error) {
-    console.error('Mark as read error:', error);
+    console.error('Toggle read status error:', error);
     return errorResponse(res, ERROR_MESSAGES.INTERNAL_ERROR, 500);
   }
 };
@@ -233,7 +248,13 @@ const getFavoriteTips = async (req, res) => {
       .filter(interaction => interaction.tipId) // Filter out deleted tips
       .map(interaction => ({
         ...interaction.tipId.toObject(),
-        favoritedAt: interaction.favoritedAt
+        // User interaction data
+        isRead: interaction.isRead,
+        isFavorite: interaction.isFavorite,
+        isUnlocked: interaction.isUnlocked,
+        readAt: interaction.readAt,
+        favoritedAt: interaction.favoritedAt,
+        unlockedAt: interaction.unlockedAt
       }));
 
     return successResponse(res, {

@@ -35,6 +35,14 @@ const notificationSchema = new mongoose.Schema({
     categoryId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Category'
+    },
+    userLevel: {
+      type: Number,
+      min: 1,
+      max: 10
+    },
+    levelName: {
+      type: String
     }
   },
   isRead: {
@@ -94,28 +102,91 @@ notificationSchema.methods.markAsSent = function() {
 };
 
 // Static method to create tip unlock notification
-notificationSchema.statics.createTipUnlockNotification = function(userId, tipId, unlockOrder, tipTitle, categoryName) {
-  const titles = {
-    1: '🌅 Morning Tip Unlocked!',
-    2: '☀️ Afternoon Tip Ready!',
-    3: '🌙 Evening Tip Available!'
+notificationSchema.statics.createTipUnlockNotification = function(userId, tipId, unlockOrder, tipTitle, categoryName, userLevel, levelName) {
+  // Level-aware titles with motivational messages
+  const getLevelAwareTitles = (level, unlockOrder) => {
+    const baseTitle = {
+      1: '🌅 Morning Tip Unlocked!',
+      2: '☀️ Afternoon Tip Ready!',
+      3: '🌙 Evening Tip Available!'
+    };
+
+    // Add level-specific motivational prefixes for higher levels
+    if (level >= 8) {
+      return {
+        1: '🏆 Expert Morning Insight!',
+        2: '⭐ Master Afternoon Tip!',
+        3: '💎 Elite Evening Wisdom!'
+      }[unlockOrder] || baseTitle[unlockOrder];
+    } else if (level >= 6) {
+      return {
+        1: '🎯 Advanced Morning Tip!',
+        2: '🚀 Advanced Afternoon Boost!',
+        3: '🌟 Advanced Evening Guide!'
+      }[unlockOrder] || baseTitle[unlockOrder];
+    } else if (level >= 4) {
+      return {
+        1: '📈 Intermediate Morning Tip!',
+        2: '💪 Intermediate Progress!',
+        3: '🎉 Intermediate Evening Tip!'
+      }[unlockOrder] || baseTitle[unlockOrder];
+    }
+    
+    return baseTitle[unlockOrder] || 'New Tip Unlocked!';
   };
 
-  const messages = {
-    1: `Your first tip of the day is ready: "${tipTitle}"`,
-    2: `Time for your second tip: "${tipTitle}"`,
-    3: `Your final tip is waiting: "${tipTitle}"`
+  // Level-aware messages with personalized content
+  const getLevelAwareMessages = (level, unlockOrder, tipTitle, levelName) => {
+    const baseMessages = {
+      1: `Your first ${levelName} tip is ready: "${tipTitle}"`,
+      2: `Perfect for your ${levelName} level: "${tipTitle}"`,
+      3: `Complete your day with this ${levelName} tip: "${tipTitle}"`
+    };
+
+    if (level >= 8) {
+      return {
+        1: `Elite ${levelName} insight awaits: "${tipTitle}" - Master your skills!`,
+        2: `Advanced ${levelName} technique: "${tipTitle}" - Push your boundaries!`,
+        3: `Expert ${levelName} wisdom: "${tipTitle}" - Excellence continues!`
+      }[unlockOrder] || baseMessages[unlockOrder];
+    } else if (level >= 6) {
+      return {
+        1: `Advanced ${levelName} strategy: "${tipTitle}" - Level up your skills!`,
+        2: `Your ${levelName} advancement: "${tipTitle}" - Keep growing!`,
+        3: `Advanced ${levelName} mastery: "${tipTitle}" - You're doing great!`
+      }[unlockOrder] || baseMessages[unlockOrder];
+    } else if (level >= 4) {
+      return {
+        1: `Intermediate ${levelName} boost: "${tipTitle}" - Building strong foundations!`,
+        2: `Your ${levelName} progress: "${tipTitle}" - Keep it up!`,
+        3: `Intermediate ${levelName} success: "${tipTitle}" - You're improving!`
+      }[unlockOrder] || baseMessages[unlockOrder];
+    } else if (level >= 2) {
+      return {
+        1: `${levelName} learning: "${tipTitle}" - Every step counts!`,
+        2: `Your ${levelName} journey: "${tipTitle}" - Progress is progress!`,
+        3: `${levelName} achievement: "${tipTitle}" - Keep learning!`
+      }[unlockOrder] || baseMessages[unlockOrder];
+    }
+    
+    return {
+      1: `Start your ${levelName} journey: "${tipTitle}" - You've got this!`,
+      2: `${levelName} foundation: "${tipTitle}" - Building confidence!`,
+      3: `${levelName} success: "${tipTitle}" - Great start today!`
+    }[unlockOrder] || baseMessages[unlockOrder];
   };
 
   return this.create({
     userId,
-    title: titles[unlockOrder] || 'New Tip Unlocked!',
-    message: messages[unlockOrder] || `A new tip is available: "${tipTitle}"`,
+    title: getLevelAwareTitles(userLevel, unlockOrder),
+    message: getLevelAwareMessages(userLevel, unlockOrder, tipTitle, levelName),
     type: 'tip_unlocked',
     data: {
       tipId,
       unlockOrder,
-      categoryName
+      categoryName,
+      userLevel,
+      levelName
     }
   });
 };
@@ -137,6 +208,50 @@ notificationSchema.statics.createDailyReminder = function(userId) {
     title: '🌟 New Tips Coming Soon!',
     message: 'Check back throughout the day for new language learning tips.',
     type: 'daily_reminder'
+  });
+};
+
+// Static method to create level-aware daily completion achievement notification
+notificationSchema.statics.createDailyCompletionAchievement = function(userId, userLevel, levelName, completedTips) {
+  const getLevelAchievementContent = (level, levelName, tipCount) => {
+    const achievements = {
+      title: '',
+      message: ''
+    };
+
+    if (level >= 8) {
+      achievements.title = '🏆 Expert Daily Mastery!';
+      achievements.message = `Outstanding! You've completed all ${tipCount} ${levelName} tips today. Your expertise continues to shine! 🌟`;
+    } else if (level >= 6) {
+      achievements.title = '🎯 Advanced Achievement!';
+      achievements.message = `Excellent work! ${tipCount} ${levelName} tips completed today. You're advancing brilliantly! 🚀`;
+    } else if (level >= 4) {
+      achievements.title = '📈 Intermediate Success!';
+      achievements.message = `Great progress! You've finished all ${tipCount} ${levelName} tips today. Keep building those skills! 💪`;
+    } else if (level >= 2) {
+      achievements.title = '🌱 Learning Achievement!';
+      achievements.message = `Well done! ${tipCount} ${levelName} tips completed today. Every step forward counts! 🎉`;
+    } else {
+      achievements.title = '⭐ Beginner Victory!';
+      achievements.message = `Amazing start! You've completed all ${tipCount} ${levelName} tips today. You're building a great foundation! 🎊`;
+    }
+
+    return achievements;
+  };
+
+  const achievement = getLevelAchievementContent(userLevel, levelName, completedTips);
+  
+  return this.create({
+    userId,
+    title: achievement.title,
+    message: achievement.message,
+    type: 'achievement',
+    data: {
+      userLevel,
+      levelName,
+      completedTips,
+      achievementType: 'daily_completion'
+    }
   });
 };
 

@@ -155,9 +155,24 @@ class DailyUnlockService {
     
     await dailyUnlock.save();
     
+    const totalUnlocked = dailyUnlock.unlockedTips.filter(tip => tip.unlockTime).length;
+    
+    // Check if all tips are unlocked and send achievement notification
+    if (totalUnlocked === 3 && newlyUnlocked.length > 0) {
+      // Only send achievement if the last tip was just unlocked
+      const lastUnlocked = newlyUnlocked[newlyUnlocked.length - 1];
+      if (lastUnlocked.unlockOrder === 3) {
+        try {
+          await notificationService.sendDailyCompletionAchievement(userId);
+        } catch (error) {
+          console.error('Failed to send daily completion achievement:', error);
+        }
+      }
+    }
+    
     return {
       newlyUnlocked,
-      totalUnlocked: dailyUnlock.unlockedTips.filter(tip => tip.unlockTime).length,
+      totalUnlocked,
       nextUnlock: this.getNextUnlockTime(dailyUnlock.unlockSchedule, now)
     };
   }
