@@ -58,13 +58,18 @@ const createSampleData = async () => {
             createdCategories.push(category);
         }
 
-        // Create sample questions
+        // Create sample questions with new format
         const questions = [
             {
                 question: 'What is the correct form of the verb "to be" in the present tense for "he"?',
                 type: 'multiple_choice',
-                options: ['am', 'is', 'are', 'be'],
-                correctAnswer: 'is',
+                options: [
+                    { id: 'A', text: 'am' },
+                    { id: 'B', text: 'is' },
+                    { id: 'C', text: 'are' },
+                    { id: 'D', text: 'be' }
+                ],
+                correctAnswer: 'B',
                 explanation: 'The correct form of "to be" for third person singular (he/she/it) is "is".',
                 categoryId: createdCategories[0]._id, // Grammar
                 difficulty: 'easy',
@@ -74,8 +79,13 @@ const createSampleData = async () => {
             {
                 question: 'Which word is a synonym for "happy"?',
                 type: 'multiple_choice',
-                options: ['sad', 'joyful', 'angry', 'tired'],
-                correctAnswer: 'joyful',
+                options: [
+                    { id: 'A', text: 'sad' },
+                    { id: 'B', text: 'joyful' },
+                    { id: 'C', text: 'angry' },
+                    { id: 'D', text: 'tired' }
+                ],
+                correctAnswer: 'B',
                 explanation: 'Joyful is a synonym for happy, meaning feeling or showing great pleasure.',
                 categoryId: createdCategories[1]._id, // Vocabulary
                 difficulty: 'easy',
@@ -85,8 +95,13 @@ const createSampleData = async () => {
             {
                 question: 'How do you pronounce the word "schedule"?',
                 type: 'multiple_choice',
-                options: ['shed-yool', 'sked-yool', 'shedule', 'skedule'],
-                correctAnswer: 'sked-yool',
+                options: [
+                    { id: 'A', text: 'shed-yool' },
+                    { id: 'B', text: 'sked-yool' },
+                    { id: 'C', text: 'shedule' },
+                    { id: 'D', text: 'skedule' }
+                ],
+                correctAnswer: 'B',
                 explanation: 'In American English, "schedule" is pronounced as "sked-yool".',
                 categoryId: createdCategories[2]._id, // Pronunciation
                 difficulty: 'medium',
@@ -96,8 +111,13 @@ const createSampleData = async () => {
             {
                 question: 'What is the appropriate response to "How are you?"?',
                 type: 'multiple_choice',
-                options: ['Goodbye', 'I am fine, thank you', 'What is your name?', 'I do not know'],
-                correctAnswer: 'I am fine, thank you',
+                options: [
+                    { id: 'A', text: 'Goodbye' },
+                    { id: 'B', text: 'I am fine, thank you' },
+                    { id: 'C', text: 'What is your name?' },
+                    { id: 'D', text: 'I do not know' }
+                ],
+                correctAnswer: 'B',
                 explanation: 'The most appropriate response to "How are you?" is "I am fine, thank you" or similar expressions.',
                 categoryId: createdCategories[3]._id, // Conversation
                 difficulty: 'easy',
@@ -108,12 +128,12 @@ const createSampleData = async () => {
                 question: 'Which sentence uses the correct past perfect tense?',
                 type: 'multiple_choice',
                 options: [
-                    'I have eaten dinner',
-                    'I had eaten dinner before she arrived',
-                    'I ate dinner',
-                    'I will eat dinner'
+                    { id: 'A', text: 'I have eaten dinner' },
+                    { id: 'B', text: 'I had eaten dinner before she arrived' },
+                    { id: 'C', text: 'I ate dinner' },
+                    { id: 'D', text: 'I will eat dinner' }
                 ],
-                correctAnswer: 'I had eaten dinner before she arrived',
+                correctAnswer: 'B',
                 explanation: 'The past perfect tense (had + past participle) is used to show that one action happened before another in the past.',
                 categoryId: createdCategories[0]._id, // Grammar
                 difficulty: 'hard',

@@ -55,7 +55,7 @@ const submitQuiz = async (req, res) => {
   try {
     const { answers, timeSpent: totalTimeSpentFromClient = 0 } = req.body;
     const userId = req.user ? req.user._id : null;
-    
+    console.log('oooooooooooooooooooooooooooooooooooooooooooooooo',req.body)
     console.log('=== Quiz Submission Debug Info ===');
     console.log('User ID:', userId);
     console.log('User object exists:', !!req.user);
@@ -186,6 +186,7 @@ const submitQuiz = async (req, res) => {
         level,
         quizCompleted: true,
         quizScore: correctAnswers,
+        quizTotalQuestions: questions.length,
         quizDate: new Date()
       }, { new: true });
       

@@ -37,6 +37,10 @@ const userSchema = new mongoose.Schema({
     type: Number,
     default: null
   },
+  quizTotalQuestions: {
+    type: Number,
+    default: null
+  },
   quizDate: {
     type: Date,
     default: null
@@ -67,10 +71,36 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
   return bcrypt.compare(candidatePassword, this.password);
 };
 
-// Remove password from JSON response
+// Remove password from JSON response and transform level to name
 userSchema.methods.toJSON = function() {
   const user = this.toObject();
   delete user.password;
+  
+  // Transform numeric level to level name
+  if (user.level && typeof user.level === 'number') {
+    const USER_LEVELS = {
+      1: 'Beginner',
+      2: 'Elementary', 
+      3: 'Pre-Intermediate',
+      4: 'Intermediate',
+      5: 'Upper-Intermediate',
+      6: 'Advanced',
+      7: 'Upper-Advanced',
+      8: 'Expert',
+      9: 'Master',
+      10: 'Grand Master'
+    };
+    user.level = USER_LEVELS[user.level] || user.level;
+  }
+  
+  // Add calculated quiz fields if quiz is completed
+  if (user.quizCompleted && user.quizScore !== null) {
+    // Default total questions to 6 if not stored (for backward compatibility)
+    const totalQuestions = user.quizTotalQuestions || 6;
+    user.quizTotalQuestions = totalQuestions;
+    user.quizPercentage = Math.round((user.quizScore / totalQuestions) * 100 * 100) / 100;
+  }
+  
   return user;
 };
 
