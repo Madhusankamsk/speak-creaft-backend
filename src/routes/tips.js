@@ -3,6 +3,7 @@ const router = express.Router();
 const { 
   getDailyTips, 
   getUserTips, 
+  getHistoricalTips,
   markAsRead, 
   toggleFavorite, 
   getFavoriteTips,
@@ -19,6 +20,9 @@ router.get('/daily', getDailyTips);
 
 // User tips
 router.get('/user', getUserTips);
+
+// Historical tips
+router.get('/history', getHistoricalTips);
 
 // Tip interactions
 router.post('/:tipId/read', markAsRead);

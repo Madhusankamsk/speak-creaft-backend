@@ -87,6 +87,42 @@ const updateUserProfile = async (req, res) => {
   }
 };
 
+// @desc    Update user profile picture
+// @route   POST /api/profile/avatar
+// @access  Private
+const updateProfilePicture = async (req, res) => {
+  try {
+    const userId = req.user._id;
+
+    if (!req.file) {
+      return errorResponse(res, 'No image file uploaded', 400);
+    }
+
+    // Get file URL (Cloudinary or local)
+    const avatarUrl = req.file.path || `/uploads/${req.file.filename}`;
+
+    // Update user avatar
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      { avatar: avatarUrl },
+      { new: true }
+    ).select('-password');
+
+    if (!updatedUser) {
+      return errorResponse(res, 'User not found', 404);
+    }
+
+    return successResponse(res, { 
+      user: updatedUser,
+      avatar: avatarUrl 
+    }, 'Profile picture updated successfully');
+
+  } catch (error) {
+    console.error('Update profile picture error:', error);
+    return errorResponse(res, ERROR_MESSAGES.INTERNAL_ERROR, 500);
+  }
+};
+
 // @desc    Get notification settings
 // @route   GET /api/profile/notification-settings
 // @access  Private
@@ -300,9 +336,192 @@ const getPrivacyPolicy = async (req, res) => {
   }
 };
 
+// @desc    Get user statistics and progress data
+// @route   GET /api/profile/statistics
+// @access  Private
+const getUserStatistics = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const user = req.user;
+
+    // Import models here to avoid circular dependencies
+    const UserQuiz = require('../models/UserQuiz');
+    const UserTipInteraction = require('../models/UserTipInteraction');
+    const DailyUnlock = require('../models/DailyUnlock');
+    const Notification = require('../models/Notification');
+
+    // Get quiz statistics
+    const quizHistory = await UserQuiz.find({ userId })
+      .sort({ createdAt: -1 })
+      .limit(5); // Last 5 quiz attempts
+
+    // Calculate quiz statistics
+    const totalQuizAttempts = quizHistory.length;
+    const bestScore = quizHistory.length > 0 
+      ? Math.max(...quizHistory.map(q => (q.score / q.totalQuestions) * 100))
+      : 0;
+    const averageScore = quizHistory.length > 0
+      ? quizHistory.reduce((sum, q) => sum + ((q.score / q.totalQuestions) * 100), 0) / totalQuizAttempts
+      : 0;
+
+    // Get tips statistics
+    const [
+      totalTipsRead,
+      totalTipsFavorited,
+      totalDaysActive,
+      recentActivity,
+      unreadNotifications
+    ] = await Promise.all([
+      UserTipInteraction.countDocuments({ userId, isRead: true }),
+      UserTipInteraction.countDocuments({ userId, isFavorite: true }),
+      DailyUnlock.countDocuments({ userId }),
+      DailyUnlock.find({ userId })
+        .sort({ date: -1 })
+        .limit(7)
+        .populate('unlockedTips.tipId', 'title type'),
+      Notification.countDocuments({ userId, isRead: false })
+    ]);
+
+    // Calculate learning streak (consecutive days with activity)
+    let currentStreak = 0;
+    let longestStreak = 0;
+    let tempStreak = 0;
+    
+    if (recentActivity.length > 0) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      // Sort activity by date descending
+      const sortedActivity = recentActivity.sort((a, b) => b.date - a.date);
+      
+      for (let i = 0; i < sortedActivity.length; i++) {
+        const activityDate = new Date(sortedActivity[i].date);
+        const expectedDate = new Date(today);
+        expectedDate.setDate(expectedDate.getDate() - i);
+        
+        if (activityDate.getTime() === expectedDate.getTime()) {
+          tempStreak++;
+          if (i === 0) currentStreak = tempStreak;
+        } else {
+          if (tempStreak > longestStreak) longestStreak = tempStreak;
+          tempStreak = 0;
+        }
+      }
+      if (tempStreak > longestStreak) longestStreak = tempStreak;
+    }
+
+    // Calculate weekly progress
+    const weekAgo = new Date();
+    weekAgo.setDate(weekAgo.getDate() - 7);
+    
+    const weeklyStats = await Promise.all([
+      UserTipInteraction.countDocuments({ 
+        userId, 
+        isRead: true, 
+        readAt: { $gte: weekAgo } 
+      }),
+      DailyUnlock.countDocuments({ 
+        userId, 
+        date: { $gte: weekAgo } 
+      })
+    ]);
+
+    // Get level progress
+    const levelInfo = {
+      current: user.level || 1,
+      name: user.level ? ['Beginner', 'Elementary', 'Pre-Intermediate', 'Intermediate', 'Upper-Intermediate', 'Advanced', 'Upper-Advanced', 'Expert', 'Master', 'Grand Master'][user.level - 1] : 'Beginner',
+      progress: user.level ? Math.min((user.level / 10) * 100, 100) : 10
+    };
+
+    // Get recent achievements (from notifications)
+    const recentAchievements = await Notification.find({
+      userId,
+      type: 'achievement'
+    })
+    .sort({ createdAt: -1 })
+    .limit(3);
+
+    const statistics = {
+      // User basic info
+      user: {
+        name: user.name,
+        email: user.email,
+        level: levelInfo,
+        joinedDate: user.createdAt,
+        lastActive: user.updatedAt
+      },
+      
+      // Quiz statistics
+      quiz: {
+        completed: user.quizCompleted,
+        currentScore: user.quizScore,
+        currentPercentage: user.quizScore && user.quizTotalQuestions 
+          ? Math.round((user.quizScore / user.quizTotalQuestions) * 100)
+          : 0,
+        totalAttempts: totalQuizAttempts,
+        bestScore: Math.round(bestScore),
+        averageScore: Math.round(averageScore),
+        completedDate: user.quizDate,
+        history: quizHistory.map(q => ({
+          id: q._id,
+          score: q.score,
+          totalQuestions: q.totalQuestions,
+          percentage: Math.round((q.score / q.totalQuestions) * 100),
+          timeSpent: q.timeSpent,
+          level: q.assignedLevel,
+          date: q.createdAt
+        }))
+      },
+      
+      // Tips and learning statistics
+      learning: {
+        totalTipsRead,
+        totalTipsFavorited,
+        totalDaysActive,
+        currentStreak,
+        longestStreak,
+        weeklyTipsRead: weeklyStats[0],
+        weeklyDaysActive: weeklyStats[1],
+        recentActivity: recentActivity.map(day => ({
+          date: day.date,
+          tipsCount: day.unlockedTips.filter(t => t.unlockTime).length,
+          tips: day.unlockedTips
+            .filter(t => t.unlockTime && t.tipId)
+            .map(t => ({
+              id: t.tipId._id,
+              title: t.tipId.title,
+              type: t.tipId.type,
+              unlockOrder: t.unlockOrder
+            }))
+        }))
+      },
+      
+      // Achievements and notifications
+      achievements: {
+        recent: recentAchievements.map(notif => ({
+          id: notif._id,
+          title: notif.title,
+          message: notif.message,
+          date: notif.createdAt,
+          data: notif.data
+        })),
+        unreadNotifications
+      }
+    };
+
+    return successResponse(res, statistics, 'User statistics retrieved successfully');
+
+  } catch (error) {
+    console.error('Get user statistics error:', error);
+    return errorResponse(res, ERROR_MESSAGES.INTERNAL_ERROR, 500);
+  }
+};
+
 module.exports = {
   getUserProfile,
   updateUserProfile,
+  updateProfilePicture,
+  getUserStatistics,
   getNotificationSettings,
   updateNotificationSettings,
   sendContactMessage,

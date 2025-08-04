@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const profileController = require('../controllers/profileController');
 const { userAuth, requireQuizCompletion } = require('../middleware/auth');
+const { uploadSingle } = require('../middleware/upload');
 
 // All profile routes require authentication
 router.use(userAuth);
@@ -9,6 +10,12 @@ router.use(userAuth);
 // Profile management
 router.get('/', profileController.getUserProfile);
 router.put('/', profileController.updateUserProfile);
+
+// Profile picture upload
+router.post('/avatar', uploadSingle('avatar', 'avatar'), profileController.updateProfilePicture);
+
+// User statistics
+router.get('/statistics', profileController.getUserStatistics);
 
 // Notification settings
 router.get('/notification-settings', profileController.getNotificationSettings);

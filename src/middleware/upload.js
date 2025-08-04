@@ -21,7 +21,7 @@ const fileFilter = (req, file, cb) => {
   }
 };
 
-// Cloudinary storage configuration
+// Cloudinary storage configuration for tips
 const cloudinaryStorage = new CloudinaryStorage({
   cloudinary: cloudinary,
   params: {
@@ -29,6 +29,19 @@ const cloudinaryStorage = new CloudinaryStorage({
     allowed_formats: ['jpg', 'jpeg', 'png', 'gif'],
     transformation: [
       { width: 800, height: 600, crop: 'limit' }, // Resize large images
+      { quality: 'auto' } // Optimize quality
+    ]
+  }
+});
+
+// Cloudinary storage configuration for avatars
+const cloudinaryAvatarStorage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: 'speakcraft/avatars', // Folder in Cloudinary for avatars
+    allowed_formats: ['jpg', 'jpeg', 'png'],
+    transformation: [
+      { width: 400, height: 400, crop: 'fill', gravity: 'face' }, // Square crop focused on face
       { quality: 'auto' } // Optimize quality
     ]
   }
@@ -47,22 +60,31 @@ const localStorage = multer.diskStorage({
 });
 
 // Choose storage based on Cloudinary configuration
-const storage = (CLOUDINARY_CONFIG.CLOUD_NAME && CLOUDINARY_CONFIG.API_KEY && CLOUDINARY_CONFIG.API_SECRET) 
-  ? cloudinaryStorage 
-  : localStorage;
+const getStorage = (storageType = 'tips') => {
+  const hasCloudinary = CLOUDINARY_CONFIG.CLOUD_NAME && CLOUDINARY_CONFIG.API_KEY && CLOUDINARY_CONFIG.API_SECRET;
+  
+  if (!hasCloudinary) {
+    return localStorage;
+  }
+  
+  return storageType === 'avatar' ? cloudinaryAvatarStorage : cloudinaryStorage;
+};
 
-// Create multer upload middleware
-const upload = multer({
-  storage: storage,
-  limits: {
-    fileSize: UPLOAD_CONFIG.MAX_FILE_SIZE
-  },
-  fileFilter: fileFilter
-});
+// Create multer upload middleware with dynamic storage
+const createUpload = (storageType = 'tips') => {
+  return multer({
+    storage: getStorage(storageType),
+    limits: {
+      fileSize: UPLOAD_CONFIG.MAX_FILE_SIZE
+    },
+    fileFilter: fileFilter
+  });
+};
 
 // Single file upload middleware
-const uploadSingle = (fieldName = 'image') => {
+const uploadSingle = (fieldName = 'image', storageType = 'tips') => {
   return (req, res, next) => {
+    const upload = createUpload(storageType);
     const uploadSingleFile = upload.single(fieldName);
     
     uploadSingleFile(req, res, (err) => {
@@ -123,7 +145,7 @@ const uploadMultiple = (fieldName = 'images', maxCount = 5) => {
 };
 
 module.exports = {
-  upload,
+  createUpload,
   uploadSingle,
   uploadMultiple,
   cloudinary

@@ -197,6 +197,93 @@ const getUserTips = async (req, res) => {
   }
 };
 
+// @desc    Get historical tips from previous days
+// @route   GET /api/tips/history
+// @access  Private
+const getHistoricalTips = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { days = 14 } = req.query; // Default to last 7 days
+    
+    // Get historical daily unlocks (excluding today)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const historicalUnlocks = await DailyUnlock.find({
+      userId,
+      date: { $lt: today } // Only past days, not today
+    })
+    .sort({ date: -1 }) // Most recent first
+    .limit(parseInt(days))
+    .populate({
+      path: 'unlockedTips.tipId',
+      populate: {
+        path: 'categoryId',
+        select: 'name color icon'
+      }
+    });
+
+    // Process each day's tips
+    const historicalTips = [];
+    
+    for (const dailyUnlock of historicalUnlocks) {
+      // Get all tip IDs for this day
+      const tipIds = dailyUnlock.unlockedTips
+        .filter(ut => ut.unlockTime) // Only unlocked tips
+        .map(ut => ut.tipId._id);
+
+      if (tipIds.length === 0) continue;
+
+      // Get user interactions for these tips
+      const userInteractions = await UserTipInteraction.find({
+        userId,
+        tipId: { $in: tipIds }
+      });
+
+      // Process tips for this day
+      const dayTips = dailyUnlock.unlockedTips
+        .filter(ut => ut.unlockTime) // Only unlocked tips
+        .map(unlockInfo => {
+          const tip = unlockInfo.tipId;
+          const interaction = userInteractions.find(
+            ui => ui.tipId.toString() === tip._id.toString()
+          );
+
+          return {
+            ...tip.toObject(),
+            unlockOrder: unlockInfo.unlockOrder,
+            unlockTime: unlockInfo.unlockTime,
+            isUnlocked: true,
+            isRead: interaction ? interaction.isRead : false,
+            isFavorite: interaction ? interaction.isFavorite : false,
+            readAt: interaction ? interaction.readAt : null,
+            favoritedAt: interaction ? interaction.favoritedAt : null,
+            unlockDate: dailyUnlock.date
+          };
+        })
+        .sort((a, b) => a.unlockOrder - b.unlockOrder);
+
+      if (dayTips.length > 0) {
+        historicalTips.push({
+          date: dailyUnlock.date,
+          tips: dayTips
+        });
+      }
+    }
+
+    console.log('Historical tips:', historicalTips);
+    console.log('Total days:', historicalTips.length);
+    return successResponse(res, {
+      historicalTips,
+      totalDays: historicalTips.length
+    }, 'Historical tips retrieved successfully');
+
+  } catch (error) {
+    console.error('Get historical tips error:', error);
+    return errorResponse(res, ERROR_MESSAGES.INTERNAL_ERROR, 500);
+  }
+};
+
 // @desc    Toggle tip read status
 // @route   POST /api/tips/:tipId/read
 // @access  Private
@@ -485,6 +572,7 @@ const getDebugSchedule = async (req, res) => {
 module.exports = {
   getDailyTips,
   getUserTips,
+  getHistoricalTips,
   markAsRead,
   toggleFavorite,
   getFavoriteTips,
