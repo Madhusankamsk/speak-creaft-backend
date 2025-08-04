@@ -3,6 +3,7 @@ const router = express.Router();
 const adminController = require('../controllers/adminController');
 const { adminAuth } = require('../middleware/adminAuth');
 const { validateAdminLogin } = require('../middleware/validation');
+const { uploadSingle } = require('../middleware/upload');
 
 // Admin authentication
 router.post('/login', validateAdminLogin, adminController.adminLogin);
@@ -72,7 +73,7 @@ router.get('/settings', adminController.getSettings);
 router.put('/settings', adminController.updateSettings);
 
 // File upload
-router.post('/upload', adminController.uploadFile);
+router.post('/upload', uploadSingle('image'), adminController.uploadFile);
 
 // Admin profile
 router.get('/profile', adminController.getAdminProfile);

@@ -1373,8 +1373,20 @@ const updateSettings = async (req, res) => {
 // @access  Private (Admin)
 const uploadFile = async (req, res) => {
   try {
-    // Implementation for file upload
-    return successResponse(res, {}, 'File uploaded successfully');
+    if (!req.file) {
+      return errorResponse(res, 'No file uploaded', 400);
+    }
+
+    // Get file URL (Cloudinary or local)
+    const fileUrl = req.file.path || `/uploads/${req.file.filename}`;
+
+    return successResponse(res, {
+      url: fileUrl,
+      filename: req.file.filename || req.file.public_id,
+      originalName: req.file.originalname,
+      size: req.file.size,
+      mimetype: req.file.mimetype
+    }, 'File uploaded successfully');
 
   } catch (error) {
     console.error('Upload file error:', error);

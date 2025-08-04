@@ -46,7 +46,7 @@ const USER_LEVELS = {
 const UNLOCK_TIMES = {
   FIRST: { hour: 9, minute: 0 },   // 9:00 AM
   SECOND: { hour: 14, minute: 0 }, // 2:00 PM
-  THIRD: { hour: 18, minute: 55 }  // 6:45 PM
+  THIRD: { hour: 18, minute: 45 }  // 6:45 PM
 };
 
 // Quiz Configuration

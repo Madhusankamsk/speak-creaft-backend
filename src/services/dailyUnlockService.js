@@ -128,7 +128,7 @@ class DailyUnlockService {
     
     // Check first unlock (9:00 AM)
     if (now >= dailyUnlock.unlockSchedule.firstUnlock && 
-        !dailyUnlock.unlockedTips[0].unlockTime) {
+        dailyUnlock.unlockedTips[0] && !dailyUnlock.unlockedTips[0].unlockTime) {
       await this.unlockTip(userId, dailyUnlock.unlockedTips[0].tipId, 1, now);
       dailyUnlock.unlockedTips[0].unlockTime = now;
       newlyUnlocked.push({
@@ -151,7 +151,7 @@ class DailyUnlockService {
     
     // Check second unlock (2:00 PM)
     if (now >= dailyUnlock.unlockSchedule.secondUnlock && 
-        !dailyUnlock.unlockedTips[1].unlockTime) {
+        dailyUnlock.unlockedTips[1] && !dailyUnlock.unlockedTips[1].unlockTime) {
       await this.unlockTip(userId, dailyUnlock.unlockedTips[1].tipId, 2, now);
       dailyUnlock.unlockedTips[1].unlockTime = now;
       newlyUnlocked.push({
@@ -174,7 +174,7 @@ class DailyUnlockService {
     
     // Check third unlock (6:45 PM)
     if (now >= dailyUnlock.unlockSchedule.thirdUnlock && 
-        !dailyUnlock.unlockedTips[2].unlockTime) {
+        dailyUnlock.unlockedTips[2] && !dailyUnlock.unlockedTips[2].unlockTime) {
       await this.unlockTip(userId, dailyUnlock.unlockedTips[2].tipId, 3, now);
       dailyUnlock.unlockedTips[2].unlockTime = now;
       newlyUnlocked.push({
