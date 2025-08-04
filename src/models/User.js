@@ -48,6 +48,32 @@ const userSchema = new mongoose.Schema({
   isActive: {
     type: Boolean,
     default: true
+  },
+  notificationSettings: {
+    tipUnlocks: {
+      type: Boolean,
+      default: true
+    },
+    dailyReminders: {
+      type: Boolean,
+      default: true
+    },
+    weeklyProgress: {
+      type: Boolean,
+      default: true
+    },
+    achievements: {
+      type: Boolean,
+      default: true
+    },
+    systemUpdates: {
+      type: Boolean,
+      default: false
+    },
+    marketing: {
+      type: Boolean,
+      default: false
+    }
   }
 }, {
   timestamps: true

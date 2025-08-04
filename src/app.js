@@ -26,6 +26,7 @@ const adminRoutes = require('./routes/admin');
 const userRoutes = require('./routes/users');
 const dailyUnlockRoutes = require('./routes/dailyUnlock');
 const notificationRoutes = require('./routes/notifications');
+const profileRoutes = require('./routes/profile');
 
 // Initialize express app
 const app = express();
@@ -160,6 +161,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/daily-unlock', dailyUnlockRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/profile', profileRoutes);
 
 // API Documentation endpoint
 app.get('/api', (req, res) => {
