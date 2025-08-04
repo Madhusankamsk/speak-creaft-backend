@@ -5,7 +5,8 @@ const {
   getUserTips, 
   markAsRead, 
   toggleFavorite, 
-  getFavoriteTips 
+  getFavoriteTips,
+  getDebugSchedule
 } = require('../controllers/tipController');
 const { userAuth, requireQuizCompletion } = require('../middleware/auth');
 
@@ -25,5 +26,8 @@ router.post('/:tipId/favorite', toggleFavorite);
 
 // Favorites
 router.get('/favorites', getFavoriteTips);
+
+// Debug endpoint (temporary)
+router.get('/debug-schedule', getDebugSchedule);
 
 module.exports = router; 

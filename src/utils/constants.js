@@ -42,11 +42,11 @@ const USER_LEVELS = {
   }
 };
 
-// Daily Unlock Times (in hours from midnight)
+// Daily Unlock Times (in hours and minutes from midnight)
 const UNLOCK_TIMES = {
-  FIRST: 9,   // 9:00 AM
-  SECOND: 14, // 2:00 PM
-  THIRD: 19   // 7:00 PM
+  FIRST: { hour: 9, minute: 0 },   // 9:00 AM
+  SECOND: { hour: 14, minute: 0 }, // 2:00 PM
+  THIRD: { hour: 18, minute: 55 }  // 6:45 PM
 };
 
 // Quiz Configuration

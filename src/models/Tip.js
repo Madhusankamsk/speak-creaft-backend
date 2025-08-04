@@ -26,6 +26,12 @@ const tipSchema = new mongoose.Schema({
     enum: ['beginner', 'intermediate', 'advanced'],
     default: 'intermediate'
   },
+  level: {
+    type: Number,
+    min: 1,
+    max: 10,
+    required: true
+  },
   tags: [{
     type: String,
     trim: true
@@ -47,5 +53,6 @@ const tipSchema = new mongoose.Schema({
 tipSchema.index({ isActive: 1, difficulty: 1 });
 tipSchema.index({ categoryId: 1, isActive: 1 });
 tipSchema.index({ type: 1, isActive: 1 });
+tipSchema.index({ level: 1, isActive: 1 });
 
 module.exports = mongoose.model('Tip', tipSchema); 

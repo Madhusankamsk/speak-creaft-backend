@@ -19,6 +19,19 @@ class DailyUnlockService {
     if (!dailyUnlock) {
       // Create new daily unlock with 3 random tips
       dailyUnlock = await this.createDailyUnlock(userId);
+    } else {
+      // Update existing unlock schedule to use new times (in case times were changed)
+      const updatedSchedule = {
+        firstUnlock: new Date(today.getTime() + (UNLOCK_TIMES.FIRST.hour * 60 * 60 * 1000) + (UNLOCK_TIMES.FIRST.minute * 60 * 1000)),
+        secondUnlock: new Date(today.getTime() + (UNLOCK_TIMES.SECOND.hour * 60 * 60 * 1000) + (UNLOCK_TIMES.SECOND.minute * 60 * 1000)),
+        thirdUnlock: new Date(today.getTime() + (UNLOCK_TIMES.THIRD.hour * 60 * 60 * 1000) + (UNLOCK_TIMES.THIRD.minute * 60 * 1000))
+      };
+      
+      // Update the schedule if it's different
+      if (dailyUnlock.unlockSchedule.thirdUnlock.getTime() !== updatedSchedule.thirdUnlock.getTime()) {
+        dailyUnlock.unlockSchedule = updatedSchedule;
+        await dailyUnlock.save();
+      }
     }
     
     return dailyUnlock;
@@ -32,12 +45,14 @@ class DailyUnlockService {
     }
     
     const today = getStartOfDay();
+    const now = new Date();
+    const { UNLOCK_TIMES } = require('../utils/constants');
     
     // Create unlock schedule for today
     const unlockSchedule = {
-      firstUnlock: new Date(today.getTime() + (UNLOCK_TIMES.FIRST * 60 * 60 * 1000)),
-      secondUnlock: new Date(today.getTime() + (UNLOCK_TIMES.SECOND * 60 * 60 * 1000)),
-      thirdUnlock: new Date(today.getTime() + (UNLOCK_TIMES.THIRD * 60 * 60 * 1000))
+      firstUnlock: new Date(today.getTime() + (UNLOCK_TIMES.FIRST.hour * 60 * 60 * 1000) + (UNLOCK_TIMES.FIRST.minute * 60 * 1000)),
+      secondUnlock: new Date(today.getTime() + (UNLOCK_TIMES.SECOND.hour * 60 * 60 * 1000) + (UNLOCK_TIMES.SECOND.minute * 60 * 1000)),
+      thirdUnlock: new Date(today.getTime() + (UNLOCK_TIMES.THIRD.hour * 60 * 60 * 1000) + (UNLOCK_TIMES.THIRD.minute * 60 * 1000))
     };
     
     // Get available tips
@@ -46,17 +61,41 @@ class DailyUnlockService {
     // Select 3 random tips
     const selectedTips = shuffleArray(availableTips).slice(0, 3);
     
+    // Determine which tips should already be unlocked for new users
+    const tipsToCreate = selectedTips.map((tip, index) => {
+      const unlockOrder = index + 1;
+      let unlockTime = null;
+      
+      // For new users, immediately unlock tips that should already be available
+      if (unlockOrder === 1 && now >= unlockSchedule.firstUnlock) {
+        unlockTime = unlockSchedule.firstUnlock;
+      } else if (unlockOrder === 2 && now >= unlockSchedule.secondUnlock) {
+        unlockTime = unlockSchedule.secondUnlock;
+      } else if (unlockOrder === 3 && now >= unlockSchedule.thirdUnlock) {
+        unlockTime = unlockSchedule.thirdUnlock;
+      }
+
+      return {
+        tipId: tip._id,
+        unlockTime,
+        unlockOrder
+      };
+    });
+    
     // Create daily unlock record
     const dailyUnlock = await DailyUnlock.create({
       userId,
       date: today,
-      unlockedTips: selectedTips.map((tip, index) => ({
-        tipId: tip._id,
-        unlockTime: null,
-        unlockOrder: index + 1
-      })),
+      unlockedTips: tipsToCreate,
       unlockSchedule
     });
+
+    // Create UserTipInteraction records for already unlocked tips
+    for (const tipData of tipsToCreate) {
+      if (tipData.unlockTime) {
+        await this.unlockTip(userId, tipData.tipId, tipData.unlockOrder, tipData.unlockTime);
+      }
+    }
     
     return dailyUnlock;
   }
@@ -65,6 +104,9 @@ class DailyUnlockService {
   async checkAndUnlockTips(userId) {
     const dailyUnlock = await this.getDailyUnlock(userId);
     const now = new Date();
+    
+    // This method now also serves as a catch-up mechanism
+    // It will unlock any overdue tips when called
     
     // Get available tips if not already selected
     if (dailyUnlock.unlockedTips.length === 0) {
@@ -130,7 +172,7 @@ class DailyUnlockService {
       }
     }
     
-    // Check third unlock (7:00 PM)
+    // Check third unlock (6:45 PM)
     if (now >= dailyUnlock.unlockSchedule.thirdUnlock && 
         !dailyUnlock.unlockedTips[2].unlockTime) {
       await this.unlockTip(userId, dailyUnlock.unlockedTips[2].tipId, 3, now);
@@ -244,7 +286,7 @@ class DailyUnlockService {
       // All unlocked for today, next unlock is tomorrow
       const tomorrow = new Date(now);
       tomorrow.setDate(tomorrow.getDate() + 1);
-      tomorrow.setHours(UNLOCK_TIMES.FIRST, 0, 0, 0);
+      tomorrow.setHours(UNLOCK_TIMES.FIRST.hour, UNLOCK_TIMES.FIRST.minute, 0, 0);
       return tomorrow;
     }
   }

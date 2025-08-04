@@ -21,6 +21,69 @@ const getDailyTips = async (req, res) => {
     if (!dailyUnlock) {
       // Create new daily unlock with 3 random tips
       dailyUnlock = await createDailyUnlock(userId);
+    } else {
+      // Update existing unlock schedule to use new times (in case times were changed)
+      const updatedSchedule = {
+        firstUnlock: new Date(today.getTime() + (UNLOCK_TIMES.FIRST.hour * 60 * 60 * 1000) + (UNLOCK_TIMES.FIRST.minute * 60 * 1000)),
+        secondUnlock: new Date(today.getTime() + (UNLOCK_TIMES.SECOND.hour * 60 * 60 * 1000) + (UNLOCK_TIMES.SECOND.minute * 60 * 1000)),
+        thirdUnlock: new Date(today.getTime() + (UNLOCK_TIMES.THIRD.hour * 60 * 60 * 1000) + (UNLOCK_TIMES.THIRD.minute * 60 * 1000))
+      };
+      
+      // Update the schedule if it's different
+      if (dailyUnlock.unlockSchedule.thirdUnlock.getTime() !== updatedSchedule.thirdUnlock.getTime()) {
+        dailyUnlock.unlockSchedule = updatedSchedule;
+        await dailyUnlock.save();
+      }
+
+      // Check and unlock any overdue tips when user opens the app
+      const now = new Date();
+      let hasUpdates = false;
+
+      // Check and unlock overdue tips
+      for (let i = 0; i < dailyUnlock.unlockedTips.length; i++) {
+        const tipUnlock = dailyUnlock.unlockedTips[i];
+        
+        // Check if tip should be unlocked based on schedule but isn't yet
+        if (!tipUnlock.unlockTime) {
+          let shouldUnlock = false;
+          let unlockTime = null;
+
+          if (tipUnlock.unlockOrder === 1 && now >= dailyUnlock.unlockSchedule.firstUnlock) {
+            shouldUnlock = true;
+            unlockTime = dailyUnlock.unlockSchedule.firstUnlock;
+          } else if (tipUnlock.unlockOrder === 2 && now >= dailyUnlock.unlockSchedule.secondUnlock) {
+            shouldUnlock = true;
+            unlockTime = dailyUnlock.unlockSchedule.secondUnlock;
+          } else if (tipUnlock.unlockOrder === 3 && now >= dailyUnlock.unlockSchedule.thirdUnlock) {
+            shouldUnlock = true;
+            unlockTime = dailyUnlock.unlockSchedule.thirdUnlock;
+          }
+
+          if (shouldUnlock) {
+            // Update the daily unlock record
+            dailyUnlock.unlockedTips[i].unlockTime = unlockTime;
+            hasUpdates = true;
+
+            // Create or update UserTipInteraction
+            await UserTipInteraction.findOneAndUpdate(
+              { userId, tipId: tipUnlock.tipId },
+              {
+                userId,
+                tipId: tipUnlock.tipId,
+                isUnlocked: true,
+                unlockedAt: unlockTime,
+                unlockOrder: tipUnlock.unlockOrder
+              },
+              { upsert: true, new: true }
+            );
+          }
+        }
+      }
+
+      // Save updates if any tips were unlocked
+      if (hasUpdates) {
+        await dailyUnlock.save();
+      }
     }
 
     // Get tips with unlock status
@@ -55,10 +118,24 @@ const getDailyTips = async (req, res) => {
       };
     });
 
+    // Calculate next unlock time
+    const now = new Date();
+    let nextUnlock = null;
+    
+    if (now < dailyUnlock.unlockSchedule.firstUnlock) {
+      nextUnlock = dailyUnlock.unlockSchedule.firstUnlock;
+    } else if (now < dailyUnlock.unlockSchedule.secondUnlock) {
+      nextUnlock = dailyUnlock.unlockSchedule.secondUnlock;
+    } else if (now < dailyUnlock.unlockSchedule.thirdUnlock) {
+      nextUnlock = dailyUnlock.unlockSchedule.thirdUnlock;
+    }
+
     return successResponse(res, {
       dailyTips: tipsWithStatus.sort((a, b) => a.unlockOrder - b.unlockOrder),
       unlockDate: dailyUnlock.date,
-      tipsRemaining: dailyUnlock.unlockedTips.filter(tip => !tip.unlockTime).length
+      tipsRemaining: dailyUnlock.unlockedTips.filter(tip => !tip.unlockTime).length,
+      nextUnlock,
+      unlockSchedule: dailyUnlock.unlockSchedule
     }, 'Daily tips retrieved successfully');
 
   } catch (error) {
@@ -271,6 +348,7 @@ const getFavoriteTips = async (req, res) => {
 const createDailyUnlock = async (userId) => {
   const user = await require('../models/User').findById(userId);
   const today = getStartOfDay();
+  const now = new Date();
 
   // Get available tips for user's level
   const allTips = await Tip.find({
@@ -302,24 +380,106 @@ const createDailyUnlock = async (userId) => {
 
   // Create unlock schedule for today
   const unlockSchedule = {
-    firstUnlock: new Date(today.getTime() + (UNLOCK_TIMES.FIRST * 60 * 60 * 1000)),
-    secondUnlock: new Date(today.getTime() + (UNLOCK_TIMES.SECOND * 60 * 60 * 1000)),
-    thirdUnlock: new Date(today.getTime() + (UNLOCK_TIMES.THIRD * 60 * 60 * 1000))
+    firstUnlock: new Date(today.getTime() + (UNLOCK_TIMES.FIRST.hour * 60 * 60 * 1000) + (UNLOCK_TIMES.FIRST.minute * 60 * 1000)),
+    secondUnlock: new Date(today.getTime() + (UNLOCK_TIMES.SECOND.hour * 60 * 60 * 1000) + (UNLOCK_TIMES.SECOND.minute * 60 * 1000)),
+    thirdUnlock: new Date(today.getTime() + (UNLOCK_TIMES.THIRD.hour * 60 * 60 * 1000) + (UNLOCK_TIMES.THIRD.minute * 60 * 1000))
   };
+
+  // Determine which tips should already be unlocked for new users
+  const tipsToCreate = selectedTips.map((tip, index) => {
+    const unlockOrder = index + 1;
+    let unlockTime = null;
+    
+    // For new users, immediately unlock tips that should already be available
+    if (unlockOrder === 1 && now >= unlockSchedule.firstUnlock) {
+      unlockTime = unlockSchedule.firstUnlock;
+    } else if (unlockOrder === 2 && now >= unlockSchedule.secondUnlock) {
+      unlockTime = unlockSchedule.secondUnlock;
+    } else if (unlockOrder === 3 && now >= unlockSchedule.thirdUnlock) {
+      unlockTime = unlockSchedule.thirdUnlock;
+    }
+
+    return {
+      tipId: tip._id,
+      unlockTime,
+      unlockOrder
+    };
+  });
 
   // Create daily unlock record
   const dailyUnlock = await DailyUnlock.create({
     userId,
     date: today,
-    unlockedTips: selectedTips.map((tip, index) => ({
-      tipId: tip._id,
-      unlockTime: null,
-      unlockOrder: index + 1
-    })),
+    unlockedTips: tipsToCreate,
     unlockSchedule
   });
 
+  // Create UserTipInteraction records for already unlocked tips
+  for (const tipData of tipsToCreate) {
+    if (tipData.unlockTime) {
+      await UserTipInteraction.findOneAndUpdate(
+        { userId, tipId: tipData.tipId },
+        {
+          userId,
+          tipId: tipData.tipId,
+          isUnlocked: true,
+          unlockedAt: tipData.unlockTime,
+          unlockOrder: tipData.unlockOrder
+        },
+        { upsert: true, new: true }
+      );
+    }
+  }
+
   return dailyUnlock;
+};
+
+// @desc    Debug endpoint to check unlock schedule
+// @route   GET /api/tips/debug-schedule
+// @access  Private
+const getDebugSchedule = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const today = getStartOfDay();
+    const now = new Date();
+
+    const dailyUnlock = await DailyUnlock.findOne({
+      userId,
+      date: today
+    });
+
+    if (!dailyUnlock) {
+      return successResponse(res, {
+        message: 'No daily unlock found for today',
+        currentTime: now.toISOString(),
+        currentTimeLocal: now.toLocaleString(),
+        unlockTimes: UNLOCK_TIMES
+      });
+    }
+
+    return successResponse(res, {
+      currentTime: now.toISOString(),
+      currentTimeLocal: now.toLocaleString(),
+      unlockSchedule: {
+        firstUnlock: dailyUnlock.unlockSchedule.firstUnlock.toISOString(),
+        firstUnlockLocal: dailyUnlock.unlockSchedule.firstUnlock.toLocaleString(),
+        secondUnlock: dailyUnlock.unlockSchedule.secondUnlock.toISOString(),
+        secondUnlockLocal: dailyUnlock.unlockSchedule.secondUnlock.toLocaleString(),
+        thirdUnlock: dailyUnlock.unlockSchedule.thirdUnlock.toISOString(),
+        thirdUnlockLocal: dailyUnlock.unlockSchedule.thirdUnlock.toLocaleString(),
+      },
+      configuredTimes: UNLOCK_TIMES,
+      timeDifferences: {
+        toFirst: dailyUnlock.unlockSchedule.firstUnlock.getTime() - now.getTime(),
+        toSecond: dailyUnlock.unlockSchedule.secondUnlock.getTime() - now.getTime(),
+        toThird: dailyUnlock.unlockSchedule.thirdUnlock.getTime() - now.getTime(),
+      }
+    });
+
+  } catch (error) {
+    console.error('Debug schedule error:', error);
+    return errorResponse(res, ERROR_MESSAGES.INTERNAL_ERROR, 500);
+  }
 };
 
 module.exports = {
@@ -327,5 +487,6 @@ module.exports = {
   getUserTips,
   markAsRead,
   toggleFavorite,
-  getFavoriteTips
+  getFavoriteTips,
+  getDebugSchedule
 }; 
