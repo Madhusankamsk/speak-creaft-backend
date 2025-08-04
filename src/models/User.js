@@ -49,6 +49,29 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
+  pushTokens: [{
+    token: {
+      type: String,
+      required: true
+    },
+    platform: {
+      type: String,
+      enum: ['ios', 'android', 'web'],
+      required: true
+    },
+    deviceId: {
+      type: String,
+      required: false
+    },
+    isActive: {
+      type: Boolean,
+      default: true
+    },
+    lastUsed: {
+      type: Date,
+      default: Date.now
+    }
+  }],
   notificationSettings: {
     tipUnlocks: {
       type: Boolean,
@@ -128,6 +151,45 @@ userSchema.methods.toJSON = function() {
   }
   
   return user;
+};
+
+// Push token management methods
+userSchema.methods.addPushToken = function(token, platform, deviceId) {
+  // Remove existing token if it exists
+  this.pushTokens = this.pushTokens.filter(t => t.token !== token);
+  
+  // Add new token
+  this.pushTokens.push({
+    token,
+    platform,
+    deviceId,
+    isActive: true,
+    lastUsed: new Date()
+  });
+  
+  // Keep only the last 5 tokens per user to prevent bloat
+  if (this.pushTokens.length > 5) {
+    this.pushTokens = this.pushTokens.slice(-5);
+  }
+  
+  return this.save();
+};
+
+userSchema.methods.removePushToken = function(token) {
+  this.pushTokens = this.pushTokens.filter(t => t.token !== token);
+  return this.save();
+};
+
+userSchema.methods.getActivePushTokens = function() {
+  return this.pushTokens.filter(t => t.isActive);
+};
+
+userSchema.methods.updateTokenLastUsed = function(token) {
+  const tokenObj = this.pushTokens.find(t => t.token === token);
+  if (tokenObj) {
+    tokenObj.lastUsed = new Date();
+    return this.save();
+  }
 };
 
 module.exports = mongoose.model('User', userSchema); 

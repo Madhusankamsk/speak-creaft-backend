@@ -3,6 +3,7 @@ const UserTipInteraction = require('../models/UserTipInteraction');
 const Tip = require('../models/Tip');
 const { successResponse, errorResponse } = require('../utils/helpers');
 const { ERROR_MESSAGES } = require('../utils/constants');
+const pushNotificationService = require('../services/pushNotificationService');
 
 // @desc    Get user profile
 // @route   GET /api/users/profile
@@ -209,9 +210,69 @@ const getCategoryProgress = async (req, res) => {
   }
 };
 
+// @desc    Register push notification token
+// @route   POST /api/users/push-token
+// @access  Private
+const registerPushToken = async (req, res) => {
+  try {
+    const { token, platform, deviceId } = req.body;
+    const userId = req.user._id;
+
+    // Validate required fields
+    if (!token || !platform) {
+      return errorResponse(res, 'Token and platform are required', 400);
+    }
+
+    // Validate platform
+    if (!['ios', 'android', 'web'].includes(platform)) {
+      return errorResponse(res, 'Invalid platform. Must be ios, android, or web', 400);
+    }
+
+    const result = await pushNotificationService.registerPushToken(
+      userId,
+      token,
+      platform,
+      deviceId
+    );
+
+    return successResponse(res, result, 'Push token registered successfully');
+
+  } catch (error) {
+    console.error('Register push token error:', error);
+    if (error.message === 'Invalid Expo push token') {
+      return errorResponse(res, 'Invalid push token format', 400);
+    }
+    return errorResponse(res, ERROR_MESSAGES.INTERNAL_ERROR, 500);
+  }
+};
+
+// @desc    Unregister push notification token
+// @route   DELETE /api/users/push-token
+// @access  Private
+const unregisterPushToken = async (req, res) => {
+  try {
+    const { token } = req.body;
+    const userId = req.user._id;
+
+    if (!token) {
+      return errorResponse(res, 'Token is required', 400);
+    }
+
+    const result = await pushNotificationService.unregisterPushToken(userId, token);
+
+    return successResponse(res, result, 'Push token unregistered successfully');
+
+  } catch (error) {
+    console.error('Unregister push token error:', error);
+    return errorResponse(res, ERROR_MESSAGES.INTERNAL_ERROR, 500);
+  }
+};
+
 module.exports = {
   getProfile,
   updateProfile,
   getUserStats,
-  getCategoryProgress
+  getCategoryProgress,
+  registerPushToken,
+  unregisterPushToken
 }; 

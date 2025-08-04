@@ -15,4 +15,8 @@ router.put('/profile', validateProfileUpdate, userController.updateProfile);
 router.get('/stats', userController.getUserStats);
 router.get('/progress/categories', userController.getCategoryProgress);
 
+// Push notification token management
+router.post('/push-token', userController.registerPushToken);
+router.delete('/push-token', userController.unregisterPushToken);
+
 module.exports = router; 

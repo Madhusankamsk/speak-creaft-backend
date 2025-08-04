@@ -3,6 +3,7 @@ const User = require('../models/User');
 const Tip = require('../models/Tip');
 const { logInfo, logError } = require('../utils/helpers');
 const { USER_LEVELS } = require('../utils/constants');
+const pushNotificationService = require('./pushNotificationService');
 
 class NotificationService {
   constructor(io = null) {
@@ -85,6 +86,15 @@ class NotificationService {
             createdAt: notification.createdAt
           }
         });
+      }
+
+      // Send push notification
+      try {
+        await pushNotificationService.sendTipUnlockNotification(userId, tip, unlockOrder);
+        logInfo('Push notification sent for tip unlock', { userId, tipId, unlockOrder });
+      } catch (pushError) {
+        logError(pushError, 'Failed to send push notification for tip unlock');
+        // Don't fail the whole process if push notification fails
       }
 
       // Mark notification as sent
