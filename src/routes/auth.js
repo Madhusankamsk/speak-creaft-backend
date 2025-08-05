@@ -6,7 +6,9 @@ const {
   refreshToken, 
   getMe, 
   forgotPassword, 
-  resetPassword 
+  resetPassword,
+  googleAuth,
+  googleCallback
 } = require('../controllers/authController');
 const { 
   validateUserRegistration, 
@@ -20,6 +22,10 @@ router.post('/login', validateUserLogin, login);
 router.post('/refresh', refreshToken);
 router.post('/forgot-password', forgotPassword);
 router.post('/reset-password', resetPassword);
+
+// Google OAuth routes
+router.post('/google', googleAuth);
+router.post('/google/callback', googleCallback);
 
 // Protected routes
 router.get('/me', userAuth, getMe);

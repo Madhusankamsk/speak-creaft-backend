@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 
 const userSchema = new mongoose.Schema({
   email: {
@@ -11,7 +12,9 @@ const userSchema = new mongoose.Schema({
   },
   password: {
     type: String,
-    required: true,
+    required: function() {
+      return !this.isGoogleUser; // Password not required for Google users
+    },
     minlength: 6
   },
   name: {
@@ -21,6 +24,27 @@ const userSchema = new mongoose.Schema({
   },
   avatar: {
     type: String,
+    default: null
+  },
+  googleId: {
+    type: String,
+    unique: true,
+    sparse: true // Allow null values but ensure uniqueness when present
+  },
+  isGoogleUser: {
+    type: Boolean,
+    default: false
+  },
+  emailVerified: {
+    type: Boolean,
+    default: false
+  },
+  passwordResetToken: {
+    type: String,
+    default: null
+  },
+  passwordResetExpires: {
+    type: Date,
     default: null
   },
   level: {
@@ -190,6 +214,37 @@ userSchema.methods.updateTokenLastUsed = function(token) {
     tokenObj.lastUsed = new Date();
     return this.save();
   }
+};
+
+// Generate password reset token
+userSchema.methods.generatePasswordResetToken = function() {
+  // Generate a random token
+  const resetToken = crypto.randomBytes(32).toString('hex');
+  
+  // Hash the token and set it to passwordResetToken field
+  this.passwordResetToken = crypto.createHash('sha256').update(resetToken).digest('hex');
+  
+  // Set expiration time (1 hour from now)
+  this.passwordResetExpires = Date.now() + 60 * 60 * 1000; // 1 hour
+  
+  // Return the unhashed token (this is what gets sent in email)
+  return resetToken;
+};
+
+// Verify password reset token
+userSchema.methods.verifyPasswordResetToken = function(token) {
+  // Hash the provided token
+  const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+  
+  // Check if token matches and hasn't expired
+  return this.passwordResetToken === hashedToken && 
+         this.passwordResetExpires > Date.now();
+};
+
+// Clear password reset token
+userSchema.methods.clearPasswordResetToken = function() {
+  this.passwordResetToken = null;
+  this.passwordResetExpires = null;
 };
 
 module.exports = mongoose.model('User', userSchema); 
