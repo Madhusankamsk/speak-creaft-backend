@@ -216,10 +216,10 @@ userSchema.methods.updateTokenLastUsed = function(token) {
   }
 };
 
-// Generate password reset token
+// Generate password reset token (6-digit OTP)
 userSchema.methods.generatePasswordResetToken = function() {
-  // Generate a random token
-  const resetToken = crypto.randomBytes(32).toString('hex');
+  // Generate a 6-digit OTP
+  const resetToken = Math.floor(100000 + Math.random() * 900000).toString();
   
   // Hash the token and set it to passwordResetToken field
   this.passwordResetToken = crypto.createHash('sha256').update(resetToken).digest('hex');
@@ -227,7 +227,7 @@ userSchema.methods.generatePasswordResetToken = function() {
   // Set expiration time (1 hour from now)
   this.passwordResetExpires = Date.now() + 60 * 60 * 1000; // 1 hour
   
-  // Return the unhashed token (this is what gets sent in email)
+  // Return the unhashed OTP (this is what gets sent in email)
   return resetToken;
 };
 

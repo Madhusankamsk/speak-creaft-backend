@@ -21,7 +21,7 @@ class EmailService {
         }
       };
 
-      this.transporter = nodemailer.createTransporter(emailConfig);
+      this.transporter = nodemailer.createTransport(emailConfig);
 
       logInfo('Email service initialized successfully');
     } catch (error) {
@@ -200,7 +200,7 @@ class EmailService {
                     <a href="${resetUrl}" class="button">Reset My Password</a>
                 </div>
                 
-                <p>Or copy and paste this reset code in the app:</p>
+                <p>Or enter this 6-digit reset code in the app:</p>
                 <div class="code">${resetToken}</div>
                 
                 <div class="warning">
@@ -212,13 +212,12 @@ class EmailService {
                     </ul>
                 </div>
                 
-                <p>If you're having trouble with the button above, you can also reset your password by opening the SpeakCraft app and entering the reset code shown above.</p>
+                <p>If you're having trouble with the button above, you can also reset your password by opening the SpeakCraft app and entering the 6-digit reset code shown above.</p>
                 
                 <p>Best regards,<br>The SpeakCraft Team</p>
             </div>
             
             <div class="footer">
-                <p>This email was sent to ${email}</p>
                 <p>If you have any questions, please contact us at support@speakcraft.com</p>
                 <p>&copy; 2024 SpeakCraft. All rights reserved.</p>
             </div>
@@ -240,7 +239,7 @@ We received a request to reset your password for your SpeakCraft account.
 Reset your password by visiting this link:
 ${resetUrl}
 
-Or use this reset code in the app: ${resetToken}
+Or use this 6-digit reset code in the app: ${resetToken}
 
 IMPORTANT:
 - This reset link will expire in 1 hour
@@ -250,7 +249,6 @@ IMPORTANT:
 Best regards,
 The SpeakCraft Team
 
-This email was sent to ${email}
 If you have any questions, please contact us at support@speakcraft.com
     `;
   }

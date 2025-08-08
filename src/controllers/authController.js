@@ -182,6 +182,46 @@ const forgotPassword = async (req, res) => {
 // @desc    Reset password
 // @route   POST /api/auth/reset-password
 // @access  Public
+// @desc    Verify reset token
+// @route   POST /api/auth/verify-reset-token
+// @access  Public
+const verifyResetToken = async (req, res) => {
+  try {
+    const { token } = req.body;
+
+    if (!token) {
+      return errorResponse(res, 'Reset token is required', 400);
+    }
+
+    // Find user with valid reset token
+    const user = await User.findOne({
+      passwordResetToken: { $ne: null },
+      passwordResetExpires: { $gt: Date.now() }
+    });
+
+    if (!user || !user.verifyPasswordResetToken(token)) {
+      return errorResponse(res, 'Invalid or expired reset token', 400);
+    }
+
+    // Check if user is a Google user
+    if (user.isGoogleUser) {
+      return errorResponse(res, 'This account uses Google Sign-In. Please sign in with Google instead.', 400);
+    }
+
+    return successResponse(res, { 
+      email: user.email,
+      verified: true 
+    }, 'Reset token verified successfully');
+
+  } catch (error) {
+    console.error('Verify reset token error:', error);
+    return errorResponse(res, ERROR_MESSAGES.INTERNAL_ERROR, 500);
+  }
+};
+
+// @desc    Reset password
+// @route   POST /api/auth/reset-password
+// @access  Public
 const resetPassword = async (req, res) => {
   try {
     const { token, password } = req.body;
@@ -382,6 +422,7 @@ module.exports = {
   refreshToken,
   getMe,
   forgotPassword,
+  verifyResetToken,
   resetPassword,
   googleAuth,
   googleCallback
