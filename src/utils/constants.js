@@ -58,8 +58,8 @@ const QUIZ_CONFIG = {
 
 // Rate Limiting
 const RATE_LIMIT_CONFIG = {
-  WINDOW_MS: 15 * 60 * 1000, // 15 minutes
-  MAX_REQUESTS: 100 // requests per window
+  WINDOW_MS: 5 * 60 * 1000, // 15 minutes
+  MAX_REQUESTS: 500 // requests per window (increased from 100)
 };
 
 // File Upload
