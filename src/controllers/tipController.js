@@ -453,13 +453,57 @@ const createDailyUnlock = async (userId) => {
     !unlockedTipIds.includes(tip._id)
   );
 
-  // If not enough tips available, reset unlocked status
+  // If not enough tips available, get recently shown tips to avoid immediate repetition
   if (availableTips.length < 3) {
-    await UserTipInteraction.updateMany(
-      { userId },
-      { isUnlocked: false, unlockOrder: null }
+    // Get tip usage statistics to make better selection
+    const tipUsageStats = await getTipUsageStats(userId, 30); // Last 30 days
+    
+    // Get tips from the last 7 days to avoid immediate repetition
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    
+    const recentDailyUnlocks = await DailyUnlock.find({
+      userId,
+      date: { $gte: sevenDaysAgo }
+    }).populate('unlockedTips.tipId');
+    
+    // Collect all tip IDs shown in the last 7 days
+    const recentlyShownTipIds = new Set();
+    recentDailyUnlocks.forEach(dailyUnlock => {
+      dailyUnlock.unlockedTips.forEach(unlockInfo => {
+        if (unlockInfo.tipId && unlockInfo.tipId._id) {
+          recentlyShownTipIds.add(unlockInfo.tipId._id.toString());
+        }
+      });
+    });
+    
+    // Filter out recently shown tips from all tips
+    const nonRecentTips = allTips.filter(tip => 
+      !recentlyShownTipIds.has(tip._id.toString())
     );
-    availableTips = allTips;
+    
+    // If we have enough non-recent tips, use them
+    if (nonRecentTips.length >= 3) {
+      availableTips = nonRecentTips;
+    } else {
+      // If still not enough, use all tips but prioritize those not shown recently
+      const priorityTips = allTips.filter(tip => 
+        !recentlyShownTipIds.has(tip._id.toString())
+      );
+      const otherTips = allTips.filter(tip => 
+        recentlyShownTipIds.has(tip._id.toString())
+      );
+      
+      // Combine priority tips first, then others
+      availableTips = [...priorityTips, ...otherTips];
+    }
+    
+    // Sort by usage frequency (least used first) to ensure better distribution
+    availableTips.sort((a, b) => {
+      const aUsage = tipUsageStats[a._id.toString()] || 0;
+      const bUsage = tipUsageStats[b._id.toString()] || 0;
+      return aUsage - bUsage;
+    });
   }
 
   // Randomly select 3 tips
@@ -519,6 +563,30 @@ const createDailyUnlock = async (userId) => {
   }
 
   return dailyUnlock;
+};
+
+// Helper function to get tip usage statistics for better distribution
+const getTipUsageStats = async (userId, days = 30) => {
+  const startDate = new Date();
+  startDate.setDate(startDate.getDate() - days);
+  
+  const dailyUnlocks = await DailyUnlock.find({
+    userId,
+    date: { $gte: startDate }
+  }).populate('unlockedTips.tipId');
+  
+  const tipUsage = {};
+  
+  dailyUnlocks.forEach(dailyUnlock => {
+    dailyUnlock.unlockedTips.forEach(unlockInfo => {
+      if (unlockInfo.tipId && unlockInfo.tipId._id) {
+        const tipId = unlockInfo.tipId._id.toString();
+        tipUsage[tipId] = (tipUsage[tipId] || 0) + 1;
+      }
+    });
+  });
+  
+  return tipUsage;
 };
 
 // @desc    Debug endpoint to check unlock schedule

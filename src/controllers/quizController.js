@@ -122,6 +122,10 @@ const submitQuiz = async (req, res) => {
 
       detailedAnswers.push({
         questionId: answer.questionId,
+        question: question.question,
+        options: question.options,
+        correctAnswer: question.correctAnswer,
+        explanation: question.explanation,
         userAnswer: answer.userAnswer,
         isCorrect,
         timeSpent

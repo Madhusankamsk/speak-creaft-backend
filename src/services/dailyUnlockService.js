@@ -252,6 +252,8 @@ class DailyUnlockService {
       isActive: true
     });
     
+    console.log(`[getAvailableTips] User ${userId} has ${allTips.length} total tips available for level ${user.level}`);
+    
     // Get tips user hasn't unlocked yet
     const unlockedTipIds = await UserTipInteraction.find({
       userId,
@@ -262,16 +264,184 @@ class DailyUnlockService {
       !unlockedTipIds.includes(tip._id)
     );
     
-    // If not enough tips available, reset unlocked status
+    console.log(`[getAvailableTips] User ${userId} has ${availableTips.length} tips not yet unlocked`);
+    
+    // If not enough tips available, get recently shown tips to avoid immediate repetition
     if (availableTips.length < 3) {
-      await UserTipInteraction.updateMany(
-        { userId },
-        { isUnlocked: false, unlockOrder: null }
+      console.log(`[getAvailableTips] Not enough tips available (${availableTips.length}), checking recent usage...`);
+      
+      // Get tip usage statistics to make better selection
+      const tipUsageStats = await this.getTipUsageStats(userId, 30); // Last 30 days
+      
+      // Get tips from the last 7 days to avoid immediate repetition
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      
+      const recentDailyUnlocks = await DailyUnlock.find({
+        userId,
+        date: { $gte: sevenDaysAgo }
+      }).populate('unlockedTips.tipId');
+      
+      // Collect all tip IDs shown in the last 7 days
+      const recentlyShownTipIds = new Set();
+      recentDailyUnlocks.forEach(dailyUnlock => {
+        dailyUnlock.unlockedTips.forEach(unlockInfo => {
+          if (unlockInfo.tipId && unlockInfo.tipId._id) {
+            recentlyShownTipIds.add(unlockInfo.tipId._id.toString());
+          }
+        });
+      });
+      
+      console.log(`[getAvailableTips] Found ${recentlyShownTipIds.size} tips shown in last 7 days`);
+      
+      // Filter out recently shown tips from all tips
+      const nonRecentTips = allTips.filter(tip => 
+        !recentlyShownTipIds.has(tip._id.toString())
       );
-      availableTips = allTips;
+      
+      // If we have enough non-recent tips, use them
+      if (nonRecentTips.length >= 3) {
+        availableTips = nonRecentTips;
+        console.log(`[getAvailableTips] Using ${nonRecentTips.length} non-recent tips`);
+      } else {
+        // If still not enough, use all tips but prioritize those not shown recently
+        const priorityTips = allTips.filter(tip => 
+          !recentlyShownTipIds.has(tip._id.toString())
+        );
+        const otherTips = allTips.filter(tip => 
+          recentlyShownTipIds.has(tip._id.toString())
+        );
+        
+        // Combine priority tips first, then others
+        availableTips = [...priorityTips, ...otherTips];
+        console.log(`[getAvailableTips] Using ${priorityTips.length} priority tips + ${otherTips.length} other tips`);
+      }
+      
+      // Sort by usage frequency (least used first) to ensure better distribution
+      availableTips.sort((a, b) => {
+        const aUsage = tipUsageStats[a._id.toString()] || 0;
+        const bUsage = tipUsageStats[b._id.toString()] || 0;
+        return aUsage - bUsage;
+      });
+      
+      console.log(`[getAvailableTips] Final available tips count: ${availableTips.length}`);
     }
     
     return availableTips;
+  }
+
+  // Get tip usage statistics for better distribution
+  async getTipUsageStats(userId, days = 30) {
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+    
+    const dailyUnlocks = await DailyUnlock.find({
+      userId,
+      date: { $gte: startDate }
+    }).populate('unlockedTips.tipId');
+    
+    const tipUsage = {};
+    
+    dailyUnlocks.forEach(dailyUnlock => {
+      dailyUnlock.unlockedTips.forEach(unlockInfo => {
+        if (unlockInfo.tipId && unlockInfo.tipId._id) {
+          const tipId = unlockInfo.tipId._id.toString();
+          tipUsage[tipId] = (tipUsage[tipId] || 0) + 1;
+        }
+      });
+    });
+    
+    return tipUsage;
+  }
+
+  // Clean up old tip interactions to prevent database bloat
+  async cleanupOldTipInteractions(userId, daysToKeep = 90) {
+    try {
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - daysToKeep);
+      
+      // Find old tip interactions that are not favorites
+      const oldInteractions = await UserTipInteraction.find({
+        userId,
+        isFavorite: false,
+        createdAt: { $lt: cutoffDate }
+      });
+      
+      if (oldInteractions.length > 0) {
+        console.log(`[cleanupOldTipInteractions] Cleaning up ${oldInteractions.length} old tip interactions for user ${userId}`);
+        
+        // Delete old interactions
+        await UserTipInteraction.deleteMany({
+          userId,
+          isFavorite: false,
+          createdAt: { $lt: cutoffDate }
+        });
+        
+        console.log(`[cleanupOldTipInteractions] Successfully cleaned up old tip interactions`);
+      }
+      
+      return oldInteractions.length;
+    } catch (error) {
+      console.error('[cleanupOldTipInteractions] Error cleaning up old tip interactions:', error);
+      return 0;
+    }
+  }
+
+  // Get comprehensive tip statistics for a user
+  async getTipStatistics(userId) {
+    try {
+      const user = await User.findById(userId);
+      const allTips = await Tip.find({
+        level: user.level,
+        isActive: true
+      });
+      
+      const unlockedTipIds = await UserTipInteraction.find({
+        userId,
+        isUnlocked: true
+      }).distinct('tipId');
+      
+      const favoriteTipIds = await UserTipInteraction.find({
+        userId,
+        isFavorite: true
+      }).distinct('tipId');
+      
+      const readTipIds = await UserTipInteraction.find({
+        userId,
+        isRead: true
+      }).distinct('tipId');
+      
+      // Get recent usage (last 30 days)
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      
+      const recentDailyUnlocks = await DailyUnlock.find({
+        userId,
+        date: { $gte: thirtyDaysAgo }
+      }).populate('unlockedTips.tipId');
+      
+      const recentTipIds = new Set();
+      recentDailyUnlocks.forEach(dailyUnlock => {
+        dailyUnlock.unlockedTips.forEach(unlockInfo => {
+          if (unlockInfo.tipId && unlockInfo.tipId._id) {
+            recentTipIds.add(unlockInfo.tipId._id.toString());
+          }
+        });
+      });
+      
+      return {
+        totalTips: allTips.length,
+        unlockedTips: unlockedTipIds.length,
+        favoriteTips: favoriteTipIds.length,
+        readTips: readTipIds.length,
+        recentTips: recentTipIds.size,
+        availableTips: allTips.length - unlockedTipIds.length,
+        completionRate: allTips.length > 0 ? (unlockedTipIds.length / allTips.length * 100).toFixed(1) : 0
+      };
+    } catch (error) {
+      console.error('[getTipStatistics] Error getting tip statistics:', error);
+      return null;
+    }
   }
 
   // Get next unlock time
