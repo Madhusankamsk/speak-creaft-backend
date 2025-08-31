@@ -449,12 +449,25 @@ const createDailyUnlock = async (userId) => {
     isUnlocked: true
   }).distinct('tipId');
 
+  // Get tips that have been assigned to this user in any daily unlock (to prevent re-assignment)
+  const assignedTipIds = await DailyUnlock.find({
+    userId
+  }).distinct('unlockedTips.tipId');
+
+  // Combine both sets of tip IDs that should be excluded
+  const excludedTipIds = new Set([
+    ...unlockedTipIds.map(id => id.toString()),
+    ...assignedTipIds.map(id => id.toString())
+  ]);
+
   let availableTips = allTips.filter(tip => 
-    !unlockedTipIds.includes(tip._id)
+    !excludedTipIds.has(tip._id.toString())
   );
 
-  // If not enough tips available, get recently shown tips to avoid immediate repetition
+  // If not enough tips available, we need to handle this case more carefully
   if (availableTips.length < 3) {
+    console.log(`[createDailyUnlock] User ${userId} has only ${availableTips.length} truly available tips`);
+    
     // Get tip usage statistics to make better selection
     const tipUsageStats = await getTipUsageStats(userId, 30); // Last 30 days
     
@@ -477,26 +490,27 @@ const createDailyUnlock = async (userId) => {
       });
     });
     
-    // Filter out recently shown tips from all tips
-    const nonRecentTips = allTips.filter(tip => 
+    // If we still don't have enough tips, we need to use tips that were assigned before
+    // but prioritize those not shown recently
+    const nonRecentAssignedTips = allTips.filter(tip => 
+      assignedTipIds.some(id => id.toString() === tip._id.toString()) &&
       !recentlyShownTipIds.has(tip._id.toString())
     );
     
-    // If we have enough non-recent tips, use them
-    if (nonRecentTips.length >= 3) {
-      availableTips = nonRecentTips;
-    } else {
-      // If still not enough, use all tips but prioritize those not shown recently
-      const priorityTips = allTips.filter(tip => 
-        !recentlyShownTipIds.has(tip._id.toString())
-      );
-      const otherTips = allTips.filter(tip => 
-        recentlyShownTipIds.has(tip._id.toString())
-      );
-      
-      // Combine priority tips first, then others
-      availableTips = [...priorityTips, ...otherTips];
-    }
+    const recentAssignedTips = allTips.filter(tip => 
+      assignedTipIds.some(id => id.toString() === tip._id.toString()) &&
+      recentlyShownTipIds.has(tip._id.toString())
+    );
+    
+    // Combine available tips with non-recent assigned tips, then recent assigned tips
+    availableTips = [
+      ...availableTips,
+      ...nonRecentAssignedTips,
+      ...recentAssignedTips
+    ];
+    
+    console.log(`[createDailyUnlock] After fallback: ${availableTips.length} total tips available`);
+    console.log(`[createDailyUnlock] Breakdown: ${allTips.filter(tip => !excludedTipIds.has(tip._id.toString())).length} fresh + ${nonRecentAssignedTips.length} non-recent assigned + ${recentAssignedTips.length} recent assigned`);
     
     // Sort by usage frequency (least used first) to ensure better distribution
     availableTips.sort((a, b) => {
