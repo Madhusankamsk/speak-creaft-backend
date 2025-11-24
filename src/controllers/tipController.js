@@ -88,35 +88,45 @@ const getDailyTips = async (req, res) => {
 
     // Get tips with unlock status
     const tipIds = dailyUnlock.unlockedTips.map(tip => tip.tipId);
-    const tips = await Tip.find({ _id: { $in: tipIds } })
-      .populate('categoryId', 'name color icon');
+    
+    // Handle case when no tips are assigned (empty array)
+    let tips = [];
+    let tipsWithStatus = [];
+    
+    if (tipIds.length > 0) {
+      tips = await Tip.find({ _id: { $in: tipIds } })
+        .populate('categoryId', 'name color icon');
 
-    // Get user interactions
-    const userInteractions = await UserTipInteraction.find({
-      userId,
-      tipId: { $in: tipIds }
-    });
+      // Get user interactions
+      const userInteractions = await UserTipInteraction.find({
+        userId,
+        tipId: { $in: tipIds }
+      });
 
-    // Merge tips with unlock info and user interactions
-    const tipsWithStatus = tips.map(tip => {
-      const unlockInfo = dailyUnlock.unlockedTips.find(
-        ut => ut.tipId.toString() === tip._id.toString()
-      );
-      const interaction = userInteractions.find(
-        ui => ui.tipId.toString() === tip._id.toString()
-      );
+      // Merge tips with unlock info and user interactions
+      tipsWithStatus = tips.map(tip => {
+        const unlockInfo = dailyUnlock.unlockedTips.find(
+          ut => ut.tipId.toString() === tip._id.toString()
+        );
+        const interaction = userInteractions.find(
+          ui => ui.tipId.toString() === tip._id.toString()
+        );
 
-      return {
-        ...tip.toObject(),
-        unlockOrder: unlockInfo.unlockOrder,
-        unlockTime: unlockInfo.unlockTime,
-        isUnlocked: !!unlockInfo.unlockTime,
-        isRead: interaction ? interaction.isRead : false,
-        isFavorite: interaction ? interaction.isFavorite : false,
-        readAt: interaction ? interaction.readAt : null,
-        favoritedAt: interaction ? interaction.favoritedAt : null
-      };
-    });
+        return {
+          ...tip.toObject(),
+          unlockOrder: unlockInfo.unlockOrder,
+          unlockTime: unlockInfo.unlockTime,
+          isUnlocked: !!unlockInfo.unlockTime,
+          isRead: interaction ? interaction.isRead : false,
+          isFavorite: interaction ? interaction.isFavorite : false,
+          readAt: interaction ? interaction.readAt : null,
+          favoritedAt: interaction ? interaction.favoritedAt : null
+        };
+      });
+    } else {
+      // No tips assigned for today - this can happen if user has exhausted all tips
+      console.log(`[getDailyTips] No tips assigned for user ${userId} on ${today.toISOString()}`);
+    }
 
     // Calculate next unlock time
     const now = new Date();
@@ -130,13 +140,19 @@ const getDailyTips = async (req, res) => {
       nextUnlock = dailyUnlock.unlockSchedule.thirdUnlock;
     }
 
+    // Determine if there are no tips available
+    const hasNoTips = tipsWithStatus.length === 0;
+    const tipsRemaining = dailyUnlock.unlockedTips.filter(tip => !tip.unlockTime).length;
+
     return successResponse(res, {
       dailyTips: tipsWithStatus.sort((a, b) => a.unlockOrder - b.unlockOrder),
       unlockDate: dailyUnlock.date,
-      tipsRemaining: dailyUnlock.unlockedTips.filter(tip => !tip.unlockTime).length,
-      nextUnlock,
-      unlockSchedule: dailyUnlock.unlockSchedule
-    }, 'Daily tips retrieved successfully');
+      tipsRemaining,
+      nextUnlock: hasNoTips ? null : nextUnlock, // No next unlock if no tips
+      unlockSchedule: dailyUnlock.unlockSchedule,
+      hasNoTips, // Flag to help frontend show appropriate message
+      message: hasNoTips ? 'No tips available for today. All tips have been unlocked or assigned.' : undefined
+    }, hasNoTips ? 'No tips available for today' : 'Daily tips retrieved successfully');
 
   } catch (error) {
     console.error('Get daily tips error:', error);
@@ -475,6 +491,10 @@ const createDailyUnlock = async (userId) => {
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
     
+    // Get tips from the last 2 days - these should NEVER be reused (Day 1 and Day 2)
+    const twoDaysAgo = new Date();
+    twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+    
     const recentDailyUnlocks = await DailyUnlock.find({
       userId,
       date: { $gte: sevenDaysAgo }
@@ -482,35 +502,48 @@ const createDailyUnlock = async (userId) => {
     
     // Collect all tip IDs shown in the last 7 days
     const recentlyShownTipIds = new Set();
+    // Collect tip IDs from the last 2 days - these must be excluded completely
+    const veryRecentTipIds = new Set();
+    
     recentDailyUnlocks.forEach(dailyUnlock => {
+      const isVeryRecent = dailyUnlock.date >= twoDaysAgo;
       dailyUnlock.unlockedTips.forEach(unlockInfo => {
         if (unlockInfo.tipId && unlockInfo.tipId._id) {
-          recentlyShownTipIds.add(unlockInfo.tipId._id.toString());
+          const tipIdStr = unlockInfo.tipId._id.toString();
+          recentlyShownTipIds.add(tipIdStr);
+          if (isVeryRecent) {
+            veryRecentTipIds.add(tipIdStr);
+          }
         }
       });
     });
     
     // If we still don't have enough tips, we need to use tips that were assigned before
-    // but prioritize those not shown recently
+    // but prioritize those not shown recently, and NEVER use tips from last 2 days
     const nonRecentAssignedTips = allTips.filter(tip => 
       assignedTipIds.some(id => id.toString() === tip._id.toString()) &&
-      !recentlyShownTipIds.has(tip._id.toString())
+      !recentlyShownTipIds.has(tip._id.toString()) &&
+      !veryRecentTipIds.has(tip._id.toString())
     );
     
-    const recentAssignedTips = allTips.filter(tip => 
+    // Only use tips from 2+ days ago (not from yesterday or today)
+    const olderAssignedTips = allTips.filter(tip => 
       assignedTipIds.some(id => id.toString() === tip._id.toString()) &&
-      recentlyShownTipIds.has(tip._id.toString())
+      recentlyShownTipIds.has(tip._id.toString()) &&
+      !veryRecentTipIds.has(tip._id.toString()) // Exclude last 2 days
     );
     
-    // Combine available tips with non-recent assigned tips, then recent assigned tips
+    // Combine available tips with non-recent assigned tips, then older assigned tips
+    // NEVER include tips from the last 2 days
     availableTips = [
       ...availableTips,
       ...nonRecentAssignedTips,
-      ...recentAssignedTips
+      ...olderAssignedTips
     ];
     
     console.log(`[createDailyUnlock] After fallback: ${availableTips.length} total tips available`);
-    console.log(`[createDailyUnlock] Breakdown: ${allTips.filter(tip => !excludedTipIds.has(tip._id.toString())).length} fresh + ${nonRecentAssignedTips.length} non-recent assigned + ${recentAssignedTips.length} recent assigned`);
+    console.log(`[createDailyUnlock] Breakdown: ${allTips.filter(tip => !excludedTipIds.has(tip._id.toString())).length} fresh + ${nonRecentAssignedTips.length} non-recent assigned + ${olderAssignedTips.length} older assigned (2+ days ago)`);
+    console.log(`[createDailyUnlock] Excluded ${veryRecentTipIds.size} tips from last 2 days to prevent immediate repetition`);
     
     // Sort by usage frequency (least used first) to ensure better distribution
     availableTips.sort((a, b) => {
@@ -522,6 +555,17 @@ const createDailyUnlock = async (userId) => {
 
   // Randomly select 3 tips
   const selectedTips = shuffleArray(availableTips).slice(0, 3);
+
+  // Check if no tips are available
+  if (selectedTips.length === 0) {
+    console.warn(`[createDailyUnlock] No tips available for user ${userId} on ${today.toISOString()}`);
+    console.warn(`[createDailyUnlock] Total tips for level ${user.level}: ${allTips.length}`);
+    console.warn(`[createDailyUnlock] Excluded tips: ${excludedTipIds.size} (unlocked: ${unlockedTipIds.length}, assigned: ${assignedTipIds.length})`);
+    console.warn(`[createDailyUnlock] Available tips after fallback: ${availableTips.length}`);
+    
+    // Still create daily unlock with empty tips so the system doesn't break
+    // The frontend will handle showing appropriate message
+  }
 
   // Create unlock schedule for today
   const unlockSchedule = {

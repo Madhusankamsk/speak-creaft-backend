@@ -288,6 +288,10 @@ class DailyUnlockService {
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
       
+      // Get tips from the last 2 days - these should NEVER be reused (Day 1 and Day 2)
+      const twoDaysAgo = new Date();
+      twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+      
       const recentDailyUnlocks = await DailyUnlock.find({
         userId,
         date: { $gte: sevenDaysAgo }
@@ -295,37 +299,50 @@ class DailyUnlockService {
       
       // Collect all tip IDs shown in the last 7 days
       const recentlyShownTipIds = new Set();
+      // Collect tip IDs from the last 2 days - these must be excluded completely
+      const veryRecentTipIds = new Set();
+      
       recentDailyUnlocks.forEach(dailyUnlock => {
+        const isVeryRecent = dailyUnlock.date >= twoDaysAgo;
         dailyUnlock.unlockedTips.forEach(unlockInfo => {
           if (unlockInfo.tipId && unlockInfo.tipId._id) {
-            recentlyShownTipIds.add(unlockInfo.tipId._id.toString());
+            const tipIdStr = unlockInfo.tipId._id.toString();
+            recentlyShownTipIds.add(tipIdStr);
+            if (isVeryRecent) {
+              veryRecentTipIds.add(tipIdStr);
+            }
           }
         });
       });
       
-      console.log(`[getAvailableTips] Found ${recentlyShownTipIds.size} tips shown in last 7 days`);
+      console.log(`[getAvailableTips] Found ${recentlyShownTipIds.size} tips shown in last 7 days, ${veryRecentTipIds.size} from last 2 days`);
       
       // If we still don't have enough tips, we need to use tips that were assigned before
-      // but prioritize those not shown recently
+      // but prioritize those not shown recently, and NEVER use tips from last 2 days
       const nonRecentAssignedTips = allTips.filter(tip => 
         assignedTipIds.some(id => id.toString() === tip._id.toString()) &&
-        !recentlyShownTipIds.has(tip._id.toString())
+        !recentlyShownTipIds.has(tip._id.toString()) &&
+        !veryRecentTipIds.has(tip._id.toString())
       );
       
-      const recentAssignedTips = allTips.filter(tip => 
+      // Only use tips from 2+ days ago (not from yesterday or today)
+      const olderAssignedTips = allTips.filter(tip => 
         assignedTipIds.some(id => id.toString() === tip._id.toString()) &&
-        recentlyShownTipIds.has(tip._id.toString())
+        recentlyShownTipIds.has(tip._id.toString()) &&
+        !veryRecentTipIds.has(tip._id.toString()) // Exclude last 2 days
       );
       
-      // Combine available tips with non-recent assigned tips, then recent assigned tips
+      // Combine available tips with non-recent assigned tips, then older assigned tips
+      // NEVER include tips from the last 2 days
       availableTips = [
         ...availableTips,
         ...nonRecentAssignedTips,
-        ...recentAssignedTips
+        ...olderAssignedTips
       ];
       
       console.log(`[getAvailableTips] After fallback: ${availableTips.length} total tips available`);
-      console.log(`[getAvailableTips] Breakdown: ${allTips.filter(tip => !excludedTipIds.has(tip._id.toString())).length} fresh + ${nonRecentAssignedTips.length} non-recent assigned + ${recentAssignedTips.length} recent assigned`);
+      console.log(`[getAvailableTips] Breakdown: ${allTips.filter(tip => !excludedTipIds.has(tip._id.toString())).length} fresh + ${nonRecentAssignedTips.length} non-recent assigned + ${olderAssignedTips.length} older assigned (2+ days ago)`);
+      console.log(`[getAvailableTips] Excluded ${veryRecentTipIds.size} tips from last 2 days to prevent immediate repetition`);
       
       // Sort by usage frequency (least used first) to ensure better distribution
       availableTips.sort((a, b) => {
